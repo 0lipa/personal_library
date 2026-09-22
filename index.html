@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="description" content="학급별 디지털 그림책을 함께 모아 보는 온라인 서가">
+  <title>디지털 그림책 서가</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <main id="landing" class="landing">
+    <section class="paper-card">
+      <p class="eyebrow">우리 반의 이야기 모음</p>
+      <h1>디지털 그림책 서가</h1>
+      <p class="intro">선생님이 알려주신 4자리 반 코드를 입력하면<br>친구들이 만든 그림책을 한 곳에서 볼 수 있어요.</p>
+      <label for="joinCodeInput">반 코드</label>
+      <div class="code-row"><input id="joinCodeInput" inputmode="numeric" maxlength="4" placeholder="0000" aria-label="4자리 반 코드"><button id="joinBtn" class="primary small">입장</button></div>
+      <p id="joinMsg" class="message" role="alert"></p>
+      <div class="divider">또는</div>
+      <button id="teacherModeBtn" class="text-button">선생님이신가요? 반 만들기 / 관리하기</button>
+      <section id="teacherPanel" class="teacher-panel hidden">
+        <p class="notice">정적 배포판에서는 선생님 모드와 데이터가 이 브라우저에만 저장됩니다. 여러 기기 공유는 Supabase 또는 Firebase 연결이 필요합니다.</p>
+        <button id="toggleTeacherBtn" class="secondary">선생님 모드 켜기</button>
+        <div id="teacherClasses" class="hidden">
+          <div id="classListWrap" class="class-list"></div>
+          <label for="newClassName">새 반 이름</label>
+          <input id="newClassName" maxlength="20" placeholder="예: 5학년 2반">
+          <button id="createClassBtn" class="primary">새 반 만들기</button>
+          <p id="createMsg" class="message" role="alert"></p>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <main id="shelfScreen" class="hidden">
+    <header class="shelf-header">
+      <button id="backBtn" class="back">← 다른 반</button>
+      <div><p class="eyebrow">우리 반 온라인 책장</p><h1 id="shelfTitle"></h1></div>
+      <div class="code-badge">반 코드 <strong id="shelfCodeText"></strong><button id="copyCodeBtn">복사</button></div>
+    </header>
+    <p id="syncBanner" class="sync-banner" role="status"></p>
+    <div id="toolsWrap" class="tools"></div>
+    <section id="shelfContainer" class="shelf-container" aria-label="그림책 서가"></section>
+    <button id="addBtn" class="fab" aria-label="책 추가하기">＋ <span>책 꽂기</span></button>
+  </main>
+
+  <div id="addOverlay" class="overlay" aria-hidden="true"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="formTitle">
+    <button class="modal-close" data-close aria-label="닫기">×</button><h2 id="formTitle">책 꽂기</h2><p class="author">제목과 이름, 그림책 주소를 입력해주세요.</p>
+    <label for="fTitle">책 제목</label><input id="fTitle" maxlength="24" placeholder="예: 구름을 삼킨 고양이">
+    <label for="fAuthor">지은이 (이름 또는 별명)</label><input id="fAuthor" maxlength="16" placeholder="예: 초록토끼">
+    <div id="modeSwitchWrap"><label>그림책 등록 방법</label><div class="seg"><button id="segLink" class="active" type="button">링크로 등록</button><button id="segQr" type="button">QR 이미지 올리기</button></div></div>
+    <div id="linkField"><label for="fUrl">그림책 링크</label><input id="fUrl" type="url" placeholder="https://..."><p class="hint">캔바, 북크리에이터 등의 공유 링크를 붙여넣으면 QR코드도 자동으로 만들어요.</p></div>
+    <div id="qrField" class="hidden"><label for="fQrFile">QR 이미지</label><input id="fQrFile" type="file" accept="image/*"><img id="qrPreview" class="qr-preview hidden" alt="선택한 QR 이미지 미리보기"></div>
+    <label>책등 색깔</label><div id="swatches" class="swatches"></div>
+    <p id="notWriterNote" class="notice hidden">학생 모드에서는 저장 뒤 생성되는 제출 코드를 선생님께 전달해주세요.</p>
+    <button id="saveBtn" class="primary">책장에 꽂기</button><p id="formMsg" class="message" role="alert"></p><button id="deleteBtn" class="danger hidden">이 책 빼기</button>
+  </section></div>
+
+  <div id="viewOverlay" class="overlay" aria-hidden="true"><section class="modal book-view" role="dialog" aria-modal="true" aria-labelledby="vTitle">
+    <button class="modal-close" data-close aria-label="닫기">×</button><p class="eyebrow">그림책</p><h2 id="vTitle"></h2><p id="vAuthor" class="author"></p>
+    <a id="vOpenLink" class="primary external" target="_blank" rel="noopener noreferrer">그림책 열기 ↗</a>
+    <section id="vQrBox" class="qr-box"><p>휴대폰으로 이어 보기</p><div id="vQrCanvasWrap"></div></section><button id="editBtn" class="secondary hidden">이 책 수정하기</button>
+  </section></div>
+
+  <div id="submitCodeOverlay" class="overlay" aria-hidden="true"><section class="modal" role="dialog" aria-modal="true"><button class="modal-close" data-close aria-label="닫기">×</button><h2>제출 코드가 준비됐어요</h2><p class="author">아래 코드를 선생님께 보내주세요. 선생님이 반영하면 책장에 보여요.</p><textarea id="submitCodeText" class="data-io" readonly></textarea><button id="copySubmitCode" class="primary">코드 복사하기</button></section></div>
+  <div id="mergeOverlay" class="overlay" aria-hidden="true"><section class="modal" role="dialog" aria-modal="true"><button class="modal-close" data-close aria-label="닫기">×</button><h2>제출 코드 반영하기</h2><p class="author">학생들에게 받은 코드를 한 줄에 하나씩 붙여넣어주세요.</p><textarea id="mergeText" class="data-io" placeholder="코드를 여기에 붙여넣기"></textarea><button id="mergeConfirm" class="primary">책장에 반영하기</button><p id="mergeMsg" class="message"></p></section></div>
+  <div id="backupOverlay" class="overlay" aria-hidden="true"><section class="modal" role="dialog" aria-modal="true"><button class="modal-close" data-close aria-label="닫기">×</button><h2>이 반 백업하기</h2><p class="author">전체 데이터를 복사해 보관할 수 있어요.</p><textarea id="backupText" class="data-io" readonly></textarea><button id="copyBackup" class="primary">복사하기</button></section></div>
+</body>
+</html>
