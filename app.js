@@ -6,8 +6,8 @@
   const config = window.SUPABASE_CONFIG || {};
   const configured = Boolean(config.url && config.publishableKey && !config.publishableKey.includes('PASTE_'));
   const $ = (id) => document.getElementById(id);
-  let localState = loadLocal(), cloud = null, authUser = null, isTeacher = false, currentClass = null, currentBooks = [];
-  let editingId = null, selectedColor = COLORS[0], mode = 'link', pendingQrData = null, currentBook = null, deleteArmed = false, realtimeChannel = null;
+  let localState = loadLocal(), cloud = null, authUser = null, isTeacher = false, isAdmin = false, currentClass = null, currentBooks = [];
+  let editingId = null, selectedColor = COLORS[0], mode = 'link', pendingQrData = null, currentBook = null, deleteArmed = false, realtimeChannel = null, feedbackFiles = [], feedbackObjectUrls = [];
 
   function loadLocal() { try { const saved = JSON.parse(localStorage.getItem(LOCAL_KEY)); return saved && saved.classes ? saved : structuredClone(seed); } catch { return structuredClone(seed); } }
   function saveLocal() { localStorage.setItem(LOCAL_KEY, JSON.stringify(localState)); }
@@ -42,8 +42,8 @@
   }
   async function refreshIdentity() {
     if (!cloud) return;
-    const { data: { user } } = await cloud.auth.getUser(); authUser = user; isTeacher = false;
-    if (user) { const { data } = await cloud.from('profiles').select('role').eq('id', user.id).maybeSingle(); isTeacher = data?.role === 'teacher'; }
+    const { data: { user } } = await cloud.auth.getUser(); authUser = user; isTeacher = false; isAdmin = false;
+    if (user) { const { data } = await cloud.from('profiles').select('role').eq('id', user.id).maybeSingle(); isAdmin = data?.role === 'admin'; isTeacher = data?.role === 'teacher' || isAdmin; }
     renderTeacherPanel();
   }
   function unsubscribe() { if (realtimeChannel && cloud) cloud.removeChannel(realtimeChannel); realtimeChannel = null; }
@@ -78,10 +78,11 @@
     $('localTeacherBtn').classList.toggle('hidden', isCloud());
     $('teacherClasses').classList.toggle('hidden', !isTeacher);
     $('teacherSignOutBtn').classList.toggle('hidden', !isCloud() || !isTeacher);
+    $('adminFeedbackBtn').classList.toggle('hidden', !isAdmin);
     if (!isCloud()) $('teacherStatus').textContent = '로컬 데모 모드입니다. Supabase 공개키를 설정하면 공동 책장이 됩니다.';
     else if (authUser?.is_anonymous) $('teacherStatus').textContent = '학생은 별도 가입 없이 제출할 수 있어요. 선생님은 이메일로 로그인하세요.';
     else if (!isTeacher) $('teacherStatus').textContent = '로그인되었습니다. 첫 선생님 계정은 설정 단계에서 권한을 부여합니다.';
-    else { $('teacherStatus').textContent = `선생님 계정: ${authUser.email}`; renderClassList(); }
+    else { $('teacherStatus').textContent = `${isAdmin ? '관리자' : '선생님'} 계정: ${authUser.email}`; renderClassList(); }
   }
   async function renderClassList() {
     const wrap = $('classListWrap'); wrap.innerHTML = '';
@@ -133,6 +134,42 @@
   }
   function openBook(book) { currentBook = book; $('vTitle').textContent = book.title; $('vAuthor').textContent = `지은이: ${book.author}`; const link = $('vOpenLink'), wrap = $('vQrCanvasWrap'); wrap.innerHTML = ''; link.href = book.value; link.classList.remove('hidden'); const canvas = document.createElement('canvas'); wrap.append(canvas); if (window.QRCode) window.QRCode.toCanvas(canvas, book.value, { width: 160, margin: 1, color: { dark: '#3a2a1c', light: '#ffffff' } }); $('editBtn').classList.toggle('hidden', !isTeacher); openOverlay('viewOverlay'); }
   async function deleteBook() { if (!deleteArmed) { deleteArmed = true; $('deleteBtn').textContent = '정말 뺄까요? 한 번 더 누르면 삭제돼요'; setTimeout(() => { deleteArmed = false; $('deleteBtn').textContent = '이 책 빼기'; }, 4000); return; } if (isCloud()) { const { error } = await cloud.from('books').delete().eq('id', editingId); if (error) { flash(friendlyError(error, '그림책을 삭제하지 못했어요.'), false); return; } await loadBooks(); } else { localState.classes[currentClass.join_code].books = localState.classes[currentClass.join_code].books.filter((book) => book.id !== editingId); saveLocal(); currentBooks = localState.classes[currentClass.join_code].books.map(localBook); } closeAll(); renderShelf(); flash('책을 뺐어요.'); }
+  function clearFeedbackFiles() { feedbackObjectUrls.forEach((url) => URL.revokeObjectURL(url)); feedbackObjectUrls = []; feedbackFiles = []; $('feedbackImages').value = ''; $('feedbackPreviews').innerHTML = ''; }
+  function renderFeedbackFiles() { const wrap = $('feedbackPreviews'); feedbackObjectUrls.forEach((url) => URL.revokeObjectURL(url)); feedbackObjectUrls = []; wrap.innerHTML = ''; feedbackFiles.forEach((file, index) => { const url = URL.createObjectURL(file); feedbackObjectUrls.push(url); const preview = document.createElement('article'); preview.className = 'feedback-preview'; const image = document.createElement('img'); image.src = url; image.alt = `첨부 사진 ${index + 1}`; const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.setAttribute('aria-label', `첨부 사진 ${index + 1} 삭제`); remove.onclick = () => { feedbackFiles.splice(index, 1); renderFeedbackFiles(); }; preview.append(image, remove); wrap.append(preview); }); }
+  function chooseFeedbackFiles(event) { const files = Array.from(event.target.files || []); if (files.length > 2) { $('feedbackMsg').textContent = '사진은 한 번에 최대 2장까지 첨부할 수 있어요.'; event.target.value = ''; return; } if (files.some((file) => !file.type.startsWith('image/'))) { $('feedbackMsg').textContent = '사진 파일만 첨부할 수 있어요.'; event.target.value = ''; return; } if (files.some((file) => file.size > 5 * 1024 * 1024)) { $('feedbackMsg').textContent = '사진 한 장의 크기는 5MB 이하여야 해요.'; event.target.value = ''; return; } feedbackFiles = files; $('feedbackMsg').textContent = ''; renderFeedbackFiles(); }
+  function updateFeedbackCount() { const field = $('feedbackMessage'); if (field.value.length > 500) field.value = field.value.slice(0, 500); $('feedbackCount').textContent = `${field.value.length} / 500자`; }
+  function openFeedback() { $('feedbackCategory').value = 'error'; $('feedbackMessage').value = ''; $('feedbackContact').value = ''; $('feedbackMsg').textContent = ''; updateFeedbackCount(); clearFeedbackFiles(); openOverlay('feedbackOverlay'); setTimeout(() => $('feedbackMessage').focus(), 10); }
+  async function submitFeedback() {
+    const message = $('feedbackMessage').value.trim(), contact = $('feedbackContact').value.trim();
+    if (!message) { $('feedbackMsg').textContent = '내용을 입력해주세요.'; return; }
+    if ($('feedbackMessage').value.length > 500) { $('feedbackMsg').textContent = '내용은 띄어쓰기 포함 500자 이내로 입력해주세요.'; return; }
+    if (contact && !/^\S+@\S+\.\S+$/.test(contact)) { $('feedbackMsg').textContent = '답변 받을 이메일을 정확히 입력해주세요.'; return; }
+    if (!isCloud() || !authUser) { $('feedbackMsg').textContent = '의견 접수 기능을 준비하는 중이에요. 잠시 후 다시 시도해주세요.'; return; }
+    $('feedbackSubmitBtn').disabled = true; $('feedbackSubmitBtn').textContent = '보내는 중…';
+    const { data, error } = await cloud.from('feedback_reports').insert({ category: $('feedbackCategory').value, message, contact_email: contact || null, page_path: window.location.pathname, user_id: authUser.id }).select('id').single();
+    if (error) { $('feedbackMsg').textContent = friendlyError(error, '의견을 보내지 못했어요. 잠시 후 다시 시도해주세요.'); $('feedbackSubmitBtn').disabled = false; $('feedbackSubmitBtn').textContent = '의견 보내기'; return; }
+    const paths = [];
+    for (let index = 0; index < feedbackFiles.length; index += 1) { const file = feedbackFiles[index]; const extension = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'; const path = `${authUser.id}/${data.id}/${index + 1}.${extension}`; const { error: uploadError } = await cloud.storage.from('feedback-images').upload(path, file, { contentType: file.type, upsert: false }); if (uploadError) { closeAll(); clearFeedbackFiles(); flash('의견은 접수됐지만 사진은 저장하지 못했어요.', false); $('feedbackSubmitBtn').disabled = false; $('feedbackSubmitBtn').textContent = '의견 보내기'; return; } paths.push(path); }
+    if (paths.length) { const { error: updateError } = await cloud.from('feedback_reports').update({ image_paths: paths }).eq('id', data.id); if (updateError) { closeAll(); clearFeedbackFiles(); flash('의견은 접수됐지만 사진 목록을 저장하지 못했어요.', false); $('feedbackSubmitBtn').disabled = false; $('feedbackSubmitBtn').textContent = '의견 보내기'; return; } }
+    closeAll(); clearFeedbackFiles(); $('feedbackSubmitBtn').disabled = false; $('feedbackSubmitBtn').textContent = '의견 보내기'; flash('의견을 보내주셔서 고마워요. 확인 후 개선하겠습니다.');
+  }
+  function feedbackCategoryLabel(category) { return ({ error: '오류 신고', question: '이용 문의', suggestion: '개선 제안', other: '기타' })[category] || '기타'; }
+  async function openAdminFeedback() {
+    if (!isCloud() || !isAdmin) return;
+    const list = $('adminFeedbackList'); list.innerHTML = '<p class="admin-feedback-empty">의견을 불러오는 중이에요…</p>'; openOverlay('adminFeedbackOverlay');
+    const { data, error } = await cloud.from('feedback_reports').select('id,category,message,contact_email,image_paths,created_at').order('created_at', { ascending: false });
+    if (error) { list.innerHTML = ''; const message = document.createElement('p'); message.className = 'admin-feedback-empty'; message.textContent = friendlyError(error, '의견을 불러오지 못했어요.'); list.append(message); return; }
+    list.innerHTML = '';
+    if (!data?.length) { list.innerHTML = '<p class="admin-feedback-empty">아직 접수된 의견이 없어요.</p>'; return; }
+    for (const report of data) {
+      const item = document.createElement('article'); item.className = 'admin-feedback-item';
+      const header = document.createElement('header'); const category = document.createElement('strong'); category.textContent = feedbackCategoryLabel(report.category); const date = document.createElement('span'); date.textContent = new Date(report.created_at).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }); header.append(category, date);
+      const content = document.createElement('p'); content.textContent = report.message; item.append(header, content);
+      if (report.contact_email) { const contact = document.createElement('div'); contact.className = 'admin-feedback-contact'; contact.textContent = `답변 이메일: ${report.contact_email}`; item.append(contact); }
+      if (report.image_paths?.length) { const images = document.createElement('div'); images.className = 'admin-feedback-images'; for (const path of report.image_paths) { const { data: signed } = await cloud.storage.from('feedback-images').createSignedUrl(path, 600); if (signed?.signedUrl) { const image = document.createElement('img'); image.src = signed.signedUrl; image.alt = '첨부 사진'; images.append(image); } } if (images.childElementCount) item.append(images); }
+      list.append(item);
+    }
+  }
   async function signUpTeacher() { const email = $('teacherEmail').value.trim(), password = $('teacherPassword').value; if (!email || password.length < 8) { $('teacherAuthMsg').textContent = '이메일과 8자 이상 비밀번호를 입력해주세요.'; return; } const { data, error } = await cloud.auth.signUp({ email, password }); if (error) { $('teacherAuthMsg').textContent = friendlyError(error, '계정을 만들지 못했어요. 다시 시도해주세요.'); return; } $('teacherAuthMsg').textContent = data.session ? '가입 및 로그인되었습니다.' : '인증 이메일을 보냈어요. 이메일 인증 후 로그인해주세요.'; await refreshIdentity(); }
   async function signInTeacher() { const { error } = await cloud.auth.signInWithPassword({ email: $('teacherEmail').value.trim(), password: $('teacherPassword').value }); if (error) { $('teacherAuthMsg').textContent = friendlyError(error, '로그인하지 못했어요. 다시 시도해주세요.'); return; } $('teacherAuthMsg').textContent = ''; await refreshIdentity(); }
   async function signOutTeacher() { await cloud.auth.signOut(); await cloud.auth.signInAnonymously(); await refreshIdentity(); }
@@ -147,7 +184,8 @@
   }
 
   $('joinBtn').onclick = joinClass; $('joinCodeInput').addEventListener('keydown', (event) => { if (event.key === 'Enter') joinClass(); }); $('backBtn').onclick = showLanding;
-  $('teacherModeBtn').onclick = () => { $('teacherPanel').classList.toggle('hidden'); renderTeacherPanel(); }; $('localTeacherBtn').onclick = () => { isTeacher = !isTeacher; renderTeacherPanel(); }; $('teacherSignUpBtn').onclick = signUpTeacher; $('teacherSignInBtn').onclick = signInTeacher; $('teacherSignOutBtn').onclick = signOutTeacher; $('createClassBtn').onclick = createClass; $('teacherInviteBtn').onclick = inviteTeacher; $('teacherInviteEmail').addEventListener('keydown', (event) => { if (event.key === 'Enter') inviteTeacher(); });
+  $('teacherModeBtn').onclick = () => { $('teacherPanel').classList.toggle('hidden'); renderTeacherPanel(); }; $('localTeacherBtn').onclick = () => { isTeacher = !isTeacher; renderTeacherPanel(); }; $('teacherSignUpBtn').onclick = signUpTeacher; $('teacherSignInBtn').onclick = signInTeacher; $('teacherSignOutBtn').onclick = signOutTeacher; $('createClassBtn').onclick = createClass; $('teacherInviteBtn').onclick = inviteTeacher; $('teacherInviteEmail').addEventListener('keydown', (event) => { if (event.key === 'Enter') inviteTeacher(); }); $('adminFeedbackBtn').onclick = openAdminFeedback;
+  $('feedbackBtn').onclick = openFeedback; $('feedbackMessage').oninput = updateFeedbackCount; $('feedbackImages').onchange = chooseFeedbackFiles; $('feedbackSubmitBtn').onclick = submitFeedback;
   $('copyCodeBtn').onclick = async () => { await copy(currentClass.join_code); $('copyCodeBtn').textContent = '복사됨!'; setTimeout(() => { $('copyCodeBtn').textContent = '복사'; }, 1200); }; $('addBtn').onclick = () => openAdd(); $('segLink').onclick = () => setMode('link'); $('segQr').onclick = () => setMode('qr'); $('fQrFile').onchange = (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (load) => { pendingQrData = load.target.result; }; reader.readAsDataURL(file); };
   $('saveBtn').onclick = saveBook; $('editBtn').onclick = () => { closeAll(); openAdd(currentBook); }; $('deleteBtn').onclick = deleteBook; $('copyBackup').onclick = async () => { await copy($('backupText').value); $('copyBackup').textContent = '복사됐어요!'; setTimeout(() => { $('copyBackup').textContent = '복사하기'; }, 1500); }; document.querySelectorAll('[data-close]').forEach((button) => { button.onclick = closeAll; }); document.querySelectorAll('.overlay').forEach((overlay) => { overlay.onclick = (event) => { if (event.target === overlay) closeAll(); }; }); document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeAll(); }); window.addEventListener('resize', () => { if (currentClass) renderShelf(); });
   (async () => { await initialiseCloud(); showLanding(); })();
