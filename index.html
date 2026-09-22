@@ -41,6 +41,14 @@
           <input id="newClassName" maxlength="20" placeholder="예: 5학년 2반">
           <button id="createClassBtn" class="primary">새 반 만들기</button>
           <p id="createMsg" class="message" role="alert"></p>
+          <section class="teacher-invites" aria-labelledby="teacherInviteTitle">
+            <p class="eyebrow">함께 관리하기</p>
+            <h3 id="teacherInviteTitle">선생님 초대</h3>
+            <p class="cloud-note">동료 선생님의 이메일을 등록하세요. 이미 가입했다면 바로 권한이 적용되고, 아직이라면 가입할 때 자동으로 선생님이 됩니다.</p>
+            <label for="teacherInviteEmail">초대할 선생님 이메일</label>
+            <div class="teacher-invite-row"><input id="teacherInviteEmail" type="email" autocomplete="email" placeholder="teacher@example.com"><button id="teacherInviteBtn" class="secondary" type="button">초대하기</button></div>
+            <p id="teacherInviteMsg" class="message" role="alert"></p>
+          </section>
           <button id="teacherSignOutBtn" class="teacher-signout" type="button">선생님 로그아웃</button>
         </div>
       </section>

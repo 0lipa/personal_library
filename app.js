@@ -83,7 +83,7 @@
     const name = $('newClassName').value.trim(); if (!name) { $('createMsg').textContent = '반 이름을 입력해주세요.'; return; }
     $('createMsg').textContent = '';
     if (!isCloud()) { const code = newJoinCode(); localState.classes[code] = { name, books: [] }; saveLocal(); currentClass = { id: code, name, join_code: code }; currentBooks = []; openShelf(); return; }
-    for (let i = 0; i < 3; i += 1) { const code = newJoinCode(); const { data, error } = await cloud.from('classes').insert({ name, join_code: code, teacher_id: authUser.id }).select('id,name,join_code').single(); if (!error) { $('newClassName').value = ''; currentClass = data; await loadBooks(); subscribe(); openShelf(); return; } if (i === 2) $('createMsg').textContent = error.message; }
+    for (let i = 0; i < 3; i += 1) { const code = newJoinCode(); const { data, error } = await cloud.rpc('create_class', { p_name: name, p_join_code: code }); if (!error && data?.[0]) { $('newClassName').value = ''; currentClass = data[0]; await loadBooks(); subscribe(); openShelf(); return; } if (i === 2) $('createMsg').textContent = error?.message || '반을 만들지 못했어요. 다시 시도해주세요.'; }
   }
 
   function renderShelf() {
@@ -124,9 +124,18 @@
   async function signUpTeacher() { const email = $('teacherEmail').value.trim(), password = $('teacherPassword').value; if (!email || password.length < 8) { $('teacherAuthMsg').textContent = '이메일과 8자 이상 비밀번호를 입력해주세요.'; return; } const { data, error } = await cloud.auth.signUp({ email, password }); if (error) { $('teacherAuthMsg').textContent = error.message; return; } $('teacherAuthMsg').textContent = data.session ? '가입 및 로그인되었습니다.' : '인증 이메일을 보냈어요. 이메일 인증 후 로그인해주세요.'; await refreshIdentity(); }
   async function signInTeacher() { const { error } = await cloud.auth.signInWithPassword({ email: $('teacherEmail').value.trim(), password: $('teacherPassword').value }); if (error) { $('teacherAuthMsg').textContent = error.message; return; } $('teacherAuthMsg').textContent = ''; await refreshIdentity(); }
   async function signOutTeacher() { await cloud.auth.signOut(); await cloud.auth.signInAnonymously(); await refreshIdentity(); }
+  async function inviteTeacher() {
+    const email = $('teacherInviteEmail').value.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) { $('teacherInviteMsg').textContent = '초대할 선생님의 이메일을 정확히 입력해주세요.'; return; }
+    $('teacherInviteMsg').textContent = '';
+    const { data, error } = await cloud.rpc('invite_teacher', { p_email: email });
+    if (error) { $('teacherInviteMsg').textContent = error.message; return; }
+    $('teacherInviteEmail').value = '';
+    $('teacherInviteMsg').textContent = data || '초대를 등록했어요.';
+  }
 
   $('joinBtn').onclick = joinClass; $('joinCodeInput').addEventListener('keydown', (event) => { if (event.key === 'Enter') joinClass(); }); $('backBtn').onclick = showLanding;
-  $('teacherModeBtn').onclick = () => { $('teacherPanel').classList.toggle('hidden'); renderTeacherPanel(); }; $('localTeacherBtn').onclick = () => { isTeacher = !isTeacher; renderTeacherPanel(); }; $('teacherSignUpBtn').onclick = signUpTeacher; $('teacherSignInBtn').onclick = signInTeacher; $('teacherSignOutBtn').onclick = signOutTeacher; $('createClassBtn').onclick = createClass;
+  $('teacherModeBtn').onclick = () => { $('teacherPanel').classList.toggle('hidden'); renderTeacherPanel(); }; $('localTeacherBtn').onclick = () => { isTeacher = !isTeacher; renderTeacherPanel(); }; $('teacherSignUpBtn').onclick = signUpTeacher; $('teacherSignInBtn').onclick = signInTeacher; $('teacherSignOutBtn').onclick = signOutTeacher; $('createClassBtn').onclick = createClass; $('teacherInviteBtn').onclick = inviteTeacher; $('teacherInviteEmail').addEventListener('keydown', (event) => { if (event.key === 'Enter') inviteTeacher(); });
   $('copyCodeBtn').onclick = async () => { await copy(currentClass.join_code); $('copyCodeBtn').textContent = '복사됨!'; setTimeout(() => { $('copyCodeBtn').textContent = '복사'; }, 1200); }; $('addBtn').onclick = () => openAdd(); $('segLink').onclick = () => setMode('link'); $('segQr').onclick = () => setMode('qr'); $('fQrFile').onchange = (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (load) => { pendingQrData = load.target.result; }; reader.readAsDataURL(file); };
   $('saveBtn').onclick = saveBook; $('editBtn').onclick = () => { closeAll(); openAdd(currentBook); }; $('deleteBtn').onclick = deleteBook; $('copyBackup').onclick = async () => { await copy($('backupText').value); $('copyBackup').textContent = '복사됐어요!'; setTimeout(() => { $('copyBackup').textContent = '복사하기'; }, 1500); }; document.querySelectorAll('[data-close]').forEach((button) => { button.onclick = closeAll; }); document.querySelectorAll('.overlay').forEach((overlay) => { overlay.onclick = (event) => { if (event.target === overlay) closeAll(); }; }); document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeAll(); }); window.addEventListener('resize', () => { if (currentClass) renderShelf(); });
   (async () => { await initialiseCloud(); showLanding(); })();
