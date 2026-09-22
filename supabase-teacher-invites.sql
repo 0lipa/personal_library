@@ -20,8 +20,10 @@ alter table public.teacher_invites enable row level security;
 revoke all on table public.teacher_invites from anon, authenticated;
 
 -- 반 코드로 입장할 때의 이름 충돌을 피하고, 현재 사용자를 반 구성원으로 등록합니다.
+drop function if exists public.join_class(text);
+
 create or replace function public.join_class(p_join_code text)
-returns table (class_id uuid, class_name text, join_code text)
+returns table (result_class_id uuid, result_class_name text, result_join_code text)
 language plpgsql
 security definer set search_path = public
 as $$
@@ -52,9 +54,59 @@ $$;
 revoke all on function public.join_class(text) from public;
 grant execute on function public.join_class(text) to authenticated;
 
+-- 학생이 제출한 그림책을 승인 대기 상태로 저장합니다.
+drop function if exists public.submit_book(text, text, text, text, text);
+
+create function public.submit_book(
+  p_join_code text,
+  p_title text,
+  p_author text,
+  p_link_url text,
+  p_color text
+)
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  target_id uuid;
+  clean_title text := trim(p_title);
+  clean_author text := trim(p_author);
+  clean_url text := trim(p_link_url);
+begin
+  select class_record.id
+  into target_id
+  from public.classes as class_record
+  where class_record.join_code = upper(trim(p_join_code))
+    and class_record.is_active = true;
+
+  if target_id is null then
+    raise exception '입장 코드를 찾을 수 없어요. 다시 확인해주세요.';
+  end if;
+  if clean_title = '' or clean_author = '' or clean_url = '' then
+    raise exception '책 제목, 이름, 그림책 링크를 모두 입력해주세요.';
+  end if;
+  if not exists (
+    select 1 from public.class_members as member_record
+    where member_record.class_id = target_id
+      and member_record.user_id = auth.uid()
+  ) then
+    raise exception '반에 다시 입장한 뒤 그림책을 제출해주세요.';
+  end if;
+
+  insert into public.books (class_id, title, author, link_url, color, status, submitted_by)
+  values (target_id, clean_title, clean_author, clean_url, p_color, 'pending', auth.uid());
+end;
+$$;
+
+revoke all on function public.submit_book(text, text, text, text, text) from public;
+grant execute on function public.submit_book(text, text, text, text, text) to authenticated;
+
 -- 한글·공백을 포함한 반 이름을 안전하게 생성합니다.
 -- 함수 내부에서 현재 로그인한 선생님인지 확인하므로 classes의 기존 RLS 정책과 충돌하지 않습니다.
-create or replace function public.create_class(p_name text, p_join_code text)
+drop function if exists public.create_class(text, text);
+
+create function public.create_class(p_name text, p_join_code text)
 returns table (id uuid, name text, join_code text)
 language plpgsql
 security definer set search_path = public
@@ -152,3 +204,6 @@ $$;
 
 revoke all on function public.invite_teacher(text) from public;
 grant execute on function public.invite_teacher(text) to authenticated;
+
+-- PostgREST가 바뀐 함수의 입·출력 형식을 즉시 새로 읽도록 합니다.
+notify pgrst, 'reload schema';

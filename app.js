@@ -69,7 +69,7 @@
     }
     const { data, error } = await cloud.rpc('join_class', { p_join_code: code });
     if (error || !data?.[0]) { $('joinMsg').textContent = error ? friendlyError(error, '반 코드를 찾지 못했어요. 다시 확인해주세요.') : '해당 반을 찾을 수 없어요.'; return; }
-    currentClass = { id: data[0].class_id, name: data[0].class_name, join_code: data[0].join_code }; await loadBooks(); subscribe(); openShelf();
+    currentClass = { id: data[0].result_class_id, name: data[0].result_class_name, join_code: data[0].result_join_code }; await loadBooks(); subscribe(); openShelf();
   }
 
   function renderTeacherPanel() {
