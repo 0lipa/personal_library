@@ -41,9 +41,17 @@ begin
   end if;
 
   return query
-  insert into public.classes (name, join_code, teacher_id)
-  values (clean_name, clean_code, auth.uid())
-  returning classes.id, classes.name, classes.join_code;
+  with created_class as (
+    insert into public.classes (name, join_code, teacher_id)
+    values (clean_name, clean_code, auth.uid())
+    returning public.classes.id as created_id,
+              public.classes.name as created_name,
+              public.classes.join_code as created_join_code
+  )
+  select created_class.created_id,
+         created_class.created_name,
+         created_class.created_join_code
+  from created_class;
 end;
 $$;
 

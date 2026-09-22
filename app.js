@@ -16,6 +16,18 @@
   function newJoinCode() { return Array.from({ length: 6 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join(''); }
   function isCloud() { return cloud !== null; }
   function flash(message, okay = true) { const banner = $('syncBanner'); banner.textContent = message; banner.classList.toggle('error', !okay); clearTimeout(flash.timer); flash.timer = setTimeout(() => { banner.textContent = ''; banner.classList.remove('error'); }, 4500); }
+  function friendlyError(error, fallback = '요청을 처리하지 못했어요. 잠시 후 다시 시도해주세요.') {
+    const message = error?.message || '';
+    if (/[가-힣]/.test(message)) return message;
+    if (/ambiguous|column reference/i.test(message)) return '반을 만들지 못했어요. 페이지를 새로고침한 뒤 다시 시도해주세요.';
+    if (/row-level security|permission denied/i.test(message)) return '권한을 확인하지 못했어요. 선생님 계정으로 다시 로그인한 뒤 시도해주세요.';
+    if (/duplicate key|already exists/i.test(message)) return '같은 정보가 이미 등록되어 있어요.';
+    if (/invalid login credentials/i.test(message)) return '이메일 또는 비밀번호를 다시 확인해주세요.';
+    if (/email not confirmed/i.test(message)) return '이메일 인증을 먼저 완료해주세요.';
+    if (/rate limit/i.test(message)) return '요청이 많아요. 잠시 후 다시 시도해주세요.';
+    if (/function.*does not exist|could not find the function/i.test(message)) return '사이트 설정을 업데이트하는 중이에요. 잠시 후 다시 시도해주세요.';
+    return fallback;
+  }
   async function copy(text) { try { await navigator.clipboard.writeText(text); } catch { const area = document.createElement('textarea'); area.value = text; document.body.append(area); area.select(); document.execCommand('copy'); area.remove(); } }
   function localBook(book) { return { ...book, status: 'published' }; }
 
@@ -37,7 +49,7 @@
   function unsubscribe() { if (realtimeChannel && cloud) cloud.removeChannel(realtimeChannel); realtimeChannel = null; }
   async function loadBooks() {
     const { data, error } = await cloud.from('books').select('id,title,author,link_url,color,status,created_at').eq('class_id', currentClass.id).order('created_at');
-    if (error) { flash(`책장을 불러오지 못했어요: ${error.message}`, false); return; }
+    if (error) { flash(friendlyError(error, '책장을 불러오지 못했어요. 잠시 후 다시 시도해주세요.'), false); return; }
     currentBooks = (data || []).map((book) => ({ ...book, value: book.link_url, type: 'link' }));
   }
   function subscribe() {
@@ -56,7 +68,7 @@
       currentClass = { id: code, name: localClass.name, join_code: code }; currentBooks = localClass.books.map(localBook); openShelf(); return;
     }
     const { data, error } = await cloud.rpc('join_class', { p_join_code: code });
-    if (error || !data?.[0]) { $('joinMsg').textContent = error?.message || '해당 반을 찾을 수 없어요.'; return; }
+    if (error || !data?.[0]) { $('joinMsg').textContent = error ? friendlyError(error, '반 코드를 찾지 못했어요. 다시 확인해주세요.') : '해당 반을 찾을 수 없어요.'; return; }
     currentClass = { id: data[0].class_id, name: data[0].class_name, join_code: data[0].join_code }; await loadBooks(); subscribe(); openShelf();
   }
 
@@ -74,7 +86,7 @@
   async function renderClassList() {
     const wrap = $('classListWrap'); wrap.innerHTML = '';
     let classes = [];
-    if (isCloud()) { const { data, error } = await cloud.from('classes').select('id,name,join_code').eq('teacher_id', authUser.id).order('created_at'); if (error) { wrap.textContent = error.message; return; } classes = data || []; }
+    if (isCloud()) { const { data, error } = await cloud.from('classes').select('id,name,join_code').eq('teacher_id', authUser.id).order('created_at'); if (error) { wrap.textContent = friendlyError(error, '만든 반 목록을 불러오지 못했어요.'); return; } classes = data || []; }
     else classes = Object.entries(localState.classes).map(([join_code, item]) => ({ id: join_code, name: item.name, join_code }));
     if (!classes.length) wrap.innerHTML = '<p class="author">아직 만든 반이 없어요.</p>';
     classes.forEach((classInfo) => { const row = document.createElement('button'); row.className = 'class-row'; row.innerHTML = `<span>${escapeHtml(classInfo.name)}</span><strong class="ccode">${classInfo.join_code}</strong>`; row.onclick = async () => { currentClass = classInfo; if (isCloud()) { await loadBooks(); subscribe(); } else currentBooks = localState.classes[classInfo.join_code].books.map(localBook); openShelf(); }; wrap.append(row); });
@@ -83,7 +95,7 @@
     const name = $('newClassName').value.trim(); if (!name) { $('createMsg').textContent = '반 이름을 입력해주세요.'; return; }
     $('createMsg').textContent = '';
     if (!isCloud()) { const code = newJoinCode(); localState.classes[code] = { name, books: [] }; saveLocal(); currentClass = { id: code, name, join_code: code }; currentBooks = []; openShelf(); return; }
-    for (let i = 0; i < 3; i += 1) { const code = newJoinCode(); const { data, error } = await cloud.rpc('create_class', { p_name: name, p_join_code: code }); if (!error && data?.[0]) { $('newClassName').value = ''; currentClass = data[0]; await loadBooks(); subscribe(); openShelf(); return; } if (i === 2) $('createMsg').textContent = error?.message || '반을 만들지 못했어요. 다시 시도해주세요.'; }
+    for (let i = 0; i < 3; i += 1) { const code = newJoinCode(); const { data, error } = await cloud.rpc('create_class', { p_name: name, p_join_code: code }); if (!error && data?.[0]) { $('newClassName').value = ''; currentClass = data[0]; await loadBooks(); subscribe(); openShelf(); return; } if (i === 2) $('createMsg').textContent = friendlyError(error, '반을 만들지 못했어요. 다시 시도해주세요.'); }
   }
 
   function renderShelf() {
@@ -103,7 +115,7 @@
   function closeAll() { document.querySelectorAll('.overlay').forEach((overlay) => { overlay.classList.remove('show'); overlay.setAttribute('aria-hidden', 'true'); }); }
   async function openApprovalModal() { await loadBooks(); renderShelf(); renderPendingBooks(); openOverlay('mergeOverlay'); }
   function renderPendingBooks() { const list = $('pendingList'); list.innerHTML = ''; const pending = currentBooks.filter((book) => book.status === 'pending'); if (!pending.length) { list.innerHTML = '<p class="author">승인 대기 중인 그림책이 없어요.</p>'; return; } pending.forEach((book) => { const row = document.createElement('article'); row.className = 'pending-row'; row.innerHTML = `<div><strong>${escapeHtml(book.title)}</strong><span>${escapeHtml(book.author)}</span></div>`; const actions = document.createElement('div'); actions.className = 'pending-actions'; const approve = document.createElement('button'); approve.className = 'primary'; approve.textContent = '공개'; approve.onclick = () => changeBookStatus(book.id, true); const reject = document.createElement('button'); reject.className = 'secondary'; reject.textContent = '삭제'; reject.onclick = () => changeBookStatus(book.id, false); actions.append(approve, reject); row.append(actions); list.append(row); }); }
-  async function changeBookStatus(id, approved) { const request = approved ? cloud.from('books').update({ status: 'published', approved_by: authUser.id, approved_at: new Date().toISOString() }).eq('id', id) : cloud.from('books').delete().eq('id', id); const { error } = await request; if (error) { flash(error.message, false); return; } await loadBooks(); renderShelf(); renderPendingBooks(); flash(approved ? '그림책을 공개했어요.' : '제출물을 삭제했어요.'); }
+  async function changeBookStatus(id, approved) { const request = approved ? cloud.from('books').update({ status: 'published', approved_by: authUser.id, approved_at: new Date().toISOString() }).eq('id', id) : cloud.from('books').delete().eq('id', id); const { error } = await request; if (error) { flash(friendlyError(error, '제출물을 처리하지 못했어요.'), false); return; } await loadBooks(); renderShelf(); renderPendingBooks(); flash(approved ? '그림책을 공개했어요.' : '제출물을 삭제했어요.'); }
   function setMode(next) { mode = next; $('segLink').classList.toggle('active', next === 'link'); $('segQr').classList.toggle('active', next === 'qr'); $('linkField').classList.toggle('hidden', next !== 'link'); $('qrField').classList.toggle('hidden', next !== 'qr'); }
   function buildSwatches(color) { selectedColor = color; const wrap = $('swatches'); wrap.innerHTML = ''; COLORS.forEach((current) => { const swatch = document.createElement('button'); swatch.type = 'button'; swatch.className = `swatch${current === color ? ' selected' : ''}`; swatch.style.background = current; swatch.setAttribute('aria-label', `책등 색 ${current}`); swatch.onclick = () => { selectedColor = current; wrap.querySelectorAll('.swatch').forEach((item) => item.classList.remove('selected')); swatch.classList.add('selected'); }; wrap.append(swatch); }); }
   function openAdd(book = null) { editingId = book?.id || null; pendingQrData = book?.type === 'qr' ? book.value : null; $('fTitle').value = book?.title || ''; $('fAuthor').value = book?.author || ''; $('fUrl').value = book?.value || ''; const canUseQr = !isCloud() && isTeacher; $('modeSwitchWrap').classList.toggle('hidden', !canUseQr); setMode(canUseQr && book?.type === 'qr' ? 'qr' : 'link'); $('notWriterNote').classList.toggle('hidden', isTeacher); $('saveBtn').textContent = isTeacher ? '책장에 꽂기' : '제출하고 승인 기다리기'; $('deleteBtn').classList.toggle('hidden', !(isTeacher && book)); $('deleteBtn').textContent = '이 책 빼기'; $('formMsg').textContent = ''; buildSwatches(book?.color || COLORS[Math.floor(Math.random() * COLORS.length)]); openOverlay('addOverlay'); setTimeout(() => $('fTitle').focus(), 10); }
@@ -114,22 +126,22 @@
     if (!value) { $('formMsg').textContent = '그림책 링크를 붙여넣어주세요.'; return; }
     if (mode !== 'qr' && !/^https?:\/\//i.test(value)) value = `https://${value}`;
     if (isCloud()) {
-      if (isTeacher) { const payload = { title, author, link_url: value, color: selectedColor, class_id: currentClass.id, submitted_by: authUser.id, status: 'published', approved_by: authUser.id, approved_at: new Date().toISOString() }; const request = editingId ? cloud.from('books').update(payload).eq('id', editingId) : cloud.from('books').insert(payload); const { error } = await request; if (error) { $('formMsg').textContent = error.message; return; } closeAll(); await loadBooks(); renderShelf(); flash('책장에 공개했어요.'); return; }
-      const { error } = await cloud.rpc('submit_book', { p_join_code: currentClass.join_code, p_title: title, p_author: author, p_link_url: value, p_color: selectedColor }); if (error) { $('formMsg').textContent = error.message; return; } closeAll(); flash('제출했어요. 선생님이 승인하면 책장에 공개됩니다.'); return;
+      if (isTeacher) { const payload = { title, author, link_url: value, color: selectedColor, class_id: currentClass.id, submitted_by: authUser.id, status: 'published', approved_by: authUser.id, approved_at: new Date().toISOString() }; const request = editingId ? cloud.from('books').update(payload).eq('id', editingId) : cloud.from('books').insert(payload); const { error } = await request; if (error) { $('formMsg').textContent = friendlyError(error, '그림책을 저장하지 못했어요.'); return; } closeAll(); await loadBooks(); renderShelf(); flash('책장에 공개했어요.'); return; }
+      const { error } = await cloud.rpc('submit_book', { p_join_code: currentClass.join_code, p_title: title, p_author: author, p_link_url: value, p_color: selectedColor }); if (error) { $('formMsg').textContent = friendlyError(error, '그림책을 제출하지 못했어요.'); return; } closeAll(); flash('제출했어요. 선생님이 승인하면 책장에 공개됩니다.'); return;
     }
     const books = localState.classes[currentClass.join_code].books; const book = { id: editingId || newId(), title, author, value, type: mode === 'qr' ? 'qr' : 'link', color: selectedColor }; const index = books.findIndex((item) => item.id === editingId); if (index >= 0) books[index] = book; else books.push(book); saveLocal(); closeAll(); currentBooks = books.map(localBook); renderShelf(); flash('이 기기 책장에 저장했어요.');
   }
   function openBook(book) { currentBook = book; $('vTitle').textContent = book.title; $('vAuthor').textContent = `지은이: ${book.author}`; const link = $('vOpenLink'), wrap = $('vQrCanvasWrap'); wrap.innerHTML = ''; link.href = book.value; link.classList.remove('hidden'); const canvas = document.createElement('canvas'); wrap.append(canvas); if (window.QRCode) window.QRCode.toCanvas(canvas, book.value, { width: 160, margin: 1, color: { dark: '#3a2a1c', light: '#ffffff' } }); $('editBtn').classList.toggle('hidden', !isTeacher); openOverlay('viewOverlay'); }
-  async function deleteBook() { if (!deleteArmed) { deleteArmed = true; $('deleteBtn').textContent = '정말 뺄까요? 한 번 더 누르면 삭제돼요'; setTimeout(() => { deleteArmed = false; $('deleteBtn').textContent = '이 책 빼기'; }, 4000); return; } if (isCloud()) { const { error } = await cloud.from('books').delete().eq('id', editingId); if (error) { flash(error.message, false); return; } await loadBooks(); } else { localState.classes[currentClass.join_code].books = localState.classes[currentClass.join_code].books.filter((book) => book.id !== editingId); saveLocal(); currentBooks = localState.classes[currentClass.join_code].books.map(localBook); } closeAll(); renderShelf(); flash('책을 뺐어요.'); }
-  async function signUpTeacher() { const email = $('teacherEmail').value.trim(), password = $('teacherPassword').value; if (!email || password.length < 8) { $('teacherAuthMsg').textContent = '이메일과 8자 이상 비밀번호를 입력해주세요.'; return; } const { data, error } = await cloud.auth.signUp({ email, password }); if (error) { $('teacherAuthMsg').textContent = error.message; return; } $('teacherAuthMsg').textContent = data.session ? '가입 및 로그인되었습니다.' : '인증 이메일을 보냈어요. 이메일 인증 후 로그인해주세요.'; await refreshIdentity(); }
-  async function signInTeacher() { const { error } = await cloud.auth.signInWithPassword({ email: $('teacherEmail').value.trim(), password: $('teacherPassword').value }); if (error) { $('teacherAuthMsg').textContent = error.message; return; } $('teacherAuthMsg').textContent = ''; await refreshIdentity(); }
+  async function deleteBook() { if (!deleteArmed) { deleteArmed = true; $('deleteBtn').textContent = '정말 뺄까요? 한 번 더 누르면 삭제돼요'; setTimeout(() => { deleteArmed = false; $('deleteBtn').textContent = '이 책 빼기'; }, 4000); return; } if (isCloud()) { const { error } = await cloud.from('books').delete().eq('id', editingId); if (error) { flash(friendlyError(error, '그림책을 삭제하지 못했어요.'), false); return; } await loadBooks(); } else { localState.classes[currentClass.join_code].books = localState.classes[currentClass.join_code].books.filter((book) => book.id !== editingId); saveLocal(); currentBooks = localState.classes[currentClass.join_code].books.map(localBook); } closeAll(); renderShelf(); flash('책을 뺐어요.'); }
+  async function signUpTeacher() { const email = $('teacherEmail').value.trim(), password = $('teacherPassword').value; if (!email || password.length < 8) { $('teacherAuthMsg').textContent = '이메일과 8자 이상 비밀번호를 입력해주세요.'; return; } const { data, error } = await cloud.auth.signUp({ email, password }); if (error) { $('teacherAuthMsg').textContent = friendlyError(error, '계정을 만들지 못했어요. 다시 시도해주세요.'); return; } $('teacherAuthMsg').textContent = data.session ? '가입 및 로그인되었습니다.' : '인증 이메일을 보냈어요. 이메일 인증 후 로그인해주세요.'; await refreshIdentity(); }
+  async function signInTeacher() { const { error } = await cloud.auth.signInWithPassword({ email: $('teacherEmail').value.trim(), password: $('teacherPassword').value }); if (error) { $('teacherAuthMsg').textContent = friendlyError(error, '로그인하지 못했어요. 다시 시도해주세요.'); return; } $('teacherAuthMsg').textContent = ''; await refreshIdentity(); }
   async function signOutTeacher() { await cloud.auth.signOut(); await cloud.auth.signInAnonymously(); await refreshIdentity(); }
   async function inviteTeacher() {
     const email = $('teacherInviteEmail').value.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)) { $('teacherInviteMsg').textContent = '초대할 선생님의 이메일을 정확히 입력해주세요.'; return; }
     $('teacherInviteMsg').textContent = '';
     const { data, error } = await cloud.rpc('invite_teacher', { p_email: email });
-    if (error) { $('teacherInviteMsg').textContent = error.message; return; }
+    if (error) { $('teacherInviteMsg').textContent = friendlyError(error, '초대를 등록하지 못했어요. 다시 시도해주세요.'); return; }
     $('teacherInviteEmail').value = '';
     $('teacherInviteMsg').textContent = data || '초대를 등록했어요.';
   }
