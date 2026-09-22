@@ -31,10 +31,13 @@
     #landing.screen-entering,#shelfScreen.screen-entering{opacity:0;transform:translateY(10px)}
     #syncBanner{opacity:0;transform:translateY(-4px);transition:opacity .2s ease,transform .25s var(--motion-ease)}
     #syncBanner.notice-visible{opacity:1;transform:translateY(0)}
+    .teacher-panel{display:grid;max-height:0;margin-top:0;padding-top:0;overflow:hidden;opacity:0;visibility:hidden;transform:translateY(-8px);border-top-color:transparent;pointer-events:none;transition:max-height .46s var(--motion-ease),margin .3s ease,padding .3s ease,opacity .22s ease,transform .3s var(--motion-ease),visibility 0s linear .46s,border-color .25s ease}
+    .teacher-panel.is-open{max-height:1450px;margin-top:18px;padding-top:12px;opacity:1;visibility:visible;transform:translateY(0);border-top-color:#d7bf97;pointer-events:auto;transition:max-height .46s var(--motion-ease),margin .3s ease,padding .3s ease,opacity .22s ease,transform .3s var(--motion-ease),visibility 0s,border-color .25s ease}
+    #teacherModeBtn[aria-expanded="true"]{color:#5f351b;text-decoration-thickness:2px;text-underline-offset:4px}
     @keyframes soft-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
     @keyframes shelf-arrive{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
     @keyframes book-arrive{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
-    @media (prefers-reduced-motion:reduce){.overlay,.overlay .modal,button,.book,.class-row,.pending-row,.feedback-preview,.swatch,input,textarea,select,#landing,#shelfScreen,#syncBanner{transition:none!important;animation:none!important}}
+    @media (prefers-reduced-motion:reduce){.overlay,.overlay .modal,button,.book,.class-row,.pending-row,.feedback-preview,.swatch,input,textarea,select,#landing,#shelfScreen,#syncBanner,.teacher-panel{transition:none!important;animation:none!important}}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
@@ -51,8 +54,8 @@
       <div class="code-row"><input id="joinCodeInput" maxlength="8" placeholder="예: A3K7MP" aria-label="4~8자리 반 코드"><button id="joinBtn" class="primary small">입장</button></div>
       <p id="joinMsg" class="message" role="alert"></p>
       <div class="divider">또는</div>
-      <button id="teacherModeBtn" class="text-button">선생님이신가요? 반 만들기 / 관리하기</button>
-      <section id="teacherPanel" class="teacher-panel hidden">
+      <button id="teacherModeBtn" class="text-button" aria-controls="teacherPanel" aria-expanded="false">선생님이신가요? 반 만들기 / 관리하기</button>
+      <section id="teacherPanel" class="teacher-panel" aria-hidden="true" inert>
         <p id="teacherStatus" class="teacher-status"></p>
         <section id="teacherAuth" class="teacher-auth hidden">
           <label for="teacherEmail">선생님 이메일</label><input id="teacherEmail" type="email" autocomplete="email" placeholder="teacher@example.com">
