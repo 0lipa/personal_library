@@ -1,34 +1,133 @@
 (() => {
   'use strict';
-  const COLORS = ['#c15b44','#3f8b82','#d9a441','#4c6c8c','#6e8b5d','#8a5a78','#b85c7e','#5b7a4a'];
-  const KEY = 'digitalPicturebookShelf_static_v1';
-  const seed = {classes:{'2734':{name:'내가 쓰고 함께 읽는 디지털 그림책',books:[{id:'bmuc2wl8ef6m50',title:'핸드폰 이어폰',author:'박서윤',value:'https://simplebooklet.com/PmysES96yi7A8BXvIsrB1k',type:'link',color:'#c15b44'}]}}};
-  let state = load(); let currentCode = null; let isTeacher = false; let editingId = null; let pendingQrData = null; let selectedColor = COLORS[0]; let mode = 'link'; let deleteArmed = false; let currentBook = null;
-  const $ = id => document.getElementById(id);
-  function clone(value){ return JSON.parse(JSON.stringify(value)); }
-  function load(){ try { const saved = JSON.parse(localStorage.getItem(KEY)); return saved && saved.classes ? saved : clone(seed); } catch { return clone(seed); } }
-  function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
-  function newCode(){ let code; do { code = String(Math.floor(1000 + Math.random() * 9000)); } while(state.classes[code]); return code; }
-  function newId(){ return `b${Date.now().toString(36)}${Math.random().toString(36).slice(2,7)}`; }
-  function escapeHtml(text){ const div=document.createElement('div'); div.textContent=text; return div.innerHTML; }
-  function flash(message, ok=true){ $('syncBanner').textContent = message; $('syncBanner').style.color = ok ? '#3f6b3a' : '#a54131'; clearTimeout(flash.timer); flash.timer=setTimeout(()=>{$('syncBanner').textContent='';},4000); }
-  async function copy(text){ try{ await navigator.clipboard.writeText(text); }catch{ const area=document.createElement('textarea'); area.value=text; document.body.append(area); area.select(); document.execCommand('copy'); area.remove(); } }
-  function showLanding(){ currentCode=null; $('shelfScreen').classList.add('hidden'); $('landing').classList.remove('hidden'); renderTeacherPanel(); }
-  function enterClass(code){ if(!state.classes[code]){ $('joinMsg').textContent='해당 코드의 반을 찾을 수 없어요.'; return; } currentCode=code; $('joinMsg').textContent=''; $('landing').classList.add('hidden'); $('shelfScreen').classList.remove('hidden'); renderShelf(); }
-  function renderTeacherPanel(){ $('toggleTeacherBtn').textContent=isTeacher?'선생님 모드 끄기':'선생님 모드 켜기'; $('teacherClasses').classList.toggle('hidden',!isTeacher); if(!isTeacher)return; const wrap=$('classListWrap'); const codes=Object.keys(state.classes); wrap.innerHTML=codes.length ? '' : '<p class="author">아직 만든 반이 없어요.</p>'; codes.forEach(code=>{ const cls=state.classes[code]; const row=document.createElement('button'); row.className='class-row'; row.innerHTML=`<span>${escapeHtml(cls.name)}</span><strong class="ccode">${code}</strong>`; row.addEventListener('click',()=>enterClass(code)); wrap.append(row); }); }
-  function renderShelf(){ const cls=state.classes[currentCode]; $('shelfTitle').textContent=cls.name; $('shelfCodeText').textContent=currentCode; renderTools(); const container=$('shelfContainer'); container.innerHTML=''; const books=cls.books || []; const groups=books.length ? Array.from({length:Math.ceil(books.length/6)},(_,i)=>books.slice(i*6,i*6+6)) : [[]]; groups.forEach(group=>{ const row=document.createElement('section'); row.className='shelf-row'; row.innerHTML='<div class="side-post left"></div><div class="side-post right"></div><div class="books-track"></div><div class="plank"></div>'; const track=row.querySelector('.books-track'); if(!group.length)track.innerHTML='<div class="empty-state">아직 책이 없어요.<br><b>오른쪽 아래 “책 꽂기”</b>를 눌러 첫 번째 그림책을 꽂아보세요 📚</div>'; group.forEach(book=>track.append(buildBook(book))); container.append(row); }); }
-  function renderTools(){ const wrap=$('toolsWrap'); wrap.innerHTML=''; if(isTeacher){ const merge=document.createElement('button'); merge.className='tool-btn'; merge.textContent='제출 코드 반영하기'; merge.onclick=()=>openOverlay('mergeOverlay'); wrap.append(merge); } const backup=document.createElement('button'); backup.className='tool-btn'; backup.textContent='이 반 백업하기'; backup.onclick=()=>{ $('backupText').value=JSON.stringify(state.classes[currentCode]); openOverlay('backupOverlay'); }; wrap.append(backup); }
-  function hash(s){let h=0; for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0; return h;}
-  function shade(hex, amount){const v=parseInt(hex.slice(1),16); const c=n=>Math.max(0,Math.min(255,n+Math.round(255*amount/100))); return `#${(0x1000000+c(v>>16)*0x10000+c((v>>8)&255)*0x100+c(v&255)).toString(16).slice(1)}`;}
-  function buildBook(book){ const h=hash(book.id); const compact=window.matchMedia('(max-width: 600px)').matches; const veryCompact=window.matchMedia('(max-width: 360px)').matches; const width=veryCompact ? 31+h%8 : compact ? 36+h%12 : 40+h%20; const height=veryCompact ? 114+(h>>4)%18 : compact ? 126+(h>>4)%22 : 150+(h>>4)%35; const button=document.createElement('button'); button.className='book'; button.style.width=`${width}px`; button.style.height=`${height}px`; button.style.background=`linear-gradient(160deg,${shade(book.color,12)},${book.color} 45%,${shade(book.color,-14)})`; button.setAttribute('aria-label',`${book.title} 열기`); button.innerHTML='<span class="spine-band top"></span><span class="spine-band bottom"></span>'; const title=document.createElement('span'); title.className='spine-title'; title.textContent=book.title; button.append(title); button.onclick=()=>openBook(book); return button; }
-  function openOverlay(id){ $(id).classList.add('show'); $(id).setAttribute('aria-hidden','false'); }
-  function closeAll(){ document.querySelectorAll('.overlay').forEach(el=>{el.classList.remove('show');el.setAttribute('aria-hidden','true');}); }
-  function swatches(color){ selectedColor=color; const wrap=$('swatches'); wrap.innerHTML=''; COLORS.forEach(c=>{const el=document.createElement('button'); el.type='button'; el.className=`swatch${c===color?' selected':''}`; el.style.background=c; el.setAttribute('aria-label',`책등 색 ${c}`); el.onclick=()=>{selectedColor=c; wrap.querySelectorAll('.swatch').forEach(x=>x.classList.remove('selected')); el.classList.add('selected');}; wrap.append(el);}); }
-  function setMode(next){ mode=next; $('segLink').classList.toggle('active',next==='link'); $('segQr').classList.toggle('active',next==='qr'); $('linkField').classList.toggle('hidden',next!=='link'); $('qrField').classList.toggle('hidden',next!=='qr'); }
-  function openAdd(book=null){ editingId=book?.id||null; pendingQrData=book?.type==='qr'?book.value:null; $('fTitle').value=book?.title||''; $('fAuthor').value=book?.author||''; $('fUrl').value=book?.type==='link'?book.value:''; $('modeSwitchWrap').classList.toggle('hidden',!isTeacher); setMode(isTeacher && book?.type==='qr'?'qr':'link'); $('notWriterNote').classList.toggle('hidden',isTeacher); $('saveBtn').textContent=isTeacher?'책장에 꽂기':'제출하고 코드 받기'; $('deleteBtn').classList.toggle('hidden',!(isTeacher&&book)); $('deleteBtn').textContent='이 책 빼기'; $('formMsg').textContent=''; $('qrPreview').classList.toggle('hidden',!pendingQrData); if(pendingQrData)$('qrPreview').src=pendingQrData; swatches(book?.color||COLORS[Math.floor(Math.random()*COLORS.length)]); openOverlay('addOverlay'); setTimeout(()=>$('fTitle').focus(),10); }
-  function saveBook(){ const title=$('fTitle').value.trim(), author=$('fAuthor').value.trim(); if(!title||!author){$('formMsg').textContent='책 제목과 이름을 모두 적어주세요.';return;} let value,type; if(mode==='link'||!isTeacher){ value=$('fUrl').value.trim(); if(!value){$('formMsg').textContent='그림책 링크를 붙여넣어주세요.';return;} if(!/^https?:\/\//i.test(value))value=`https://${value}`; type='link'; } else {value=pendingQrData;type='qr';if(!value){$('formMsg').textContent='QR 이미지를 선택해주세요.';return;}}
-    if(isTeacher){const books=state.classes[currentCode].books; const book={id:editingId||newId(),title,author,value,type,color:selectedColor}; const index=books.findIndex(x=>x.id===editingId); if(index>=0)books[index]=book;else books.push(book); save();closeAll();renderShelf();flash('이 기기 책장에 저장했어요.');} else {const submission={v:1,code:currentCode,id:newId(),title,author,value,type,color:selectedColor}; try{$('submitCodeText').value=btoa(unescape(encodeURIComponent(JSON.stringify(submission))));closeAll();openOverlay('submitCodeOverlay');}catch{$('formMsg').textContent='제출 코드를 만들지 못했어요.';} }
+  const COLORS = ['#c15b44', '#3f8b82', '#d9a441', '#4c6c8c', '#6e8b5d', '#8a5a78', '#b85c7e', '#5b7a4a'];
+  const LOCAL_KEY = 'digitalPicturebookShelf_static_v1';
+  const seed = { classes: { '2734': { name: '내가 쓰고 함께 읽는 디지털 그림책', books: [{ id: 'bmuc2wl8ef6m50', title: '핸드폰 이어폰', author: '박서윤', value: 'https://simplebooklet.com/PmysES96yi7A8BXvIsrB1k', type: 'link', color: '#c15b44' }] } } };
+  const config = window.SUPABASE_CONFIG || {};
+  const configured = Boolean(config.url && config.publishableKey && !config.publishableKey.includes('PASTE_'));
+  const $ = (id) => document.getElementById(id);
+  let localState = loadLocal(), cloud = null, authUser = null, isTeacher = false, currentClass = null, currentBooks = [];
+  let editingId = null, selectedColor = COLORS[0], mode = 'link', pendingQrData = null, currentBook = null, deleteArmed = false, realtimeChannel = null;
+
+  function loadLocal() { try { const saved = JSON.parse(localStorage.getItem(LOCAL_KEY)); return saved && saved.classes ? saved : structuredClone(seed); } catch { return structuredClone(seed); } }
+  function saveLocal() { localStorage.setItem(LOCAL_KEY, JSON.stringify(localState)); }
+  function escapeHtml(text) { const node = document.createElement('div'); node.textContent = text; return node.innerHTML; }
+  function newId() { return `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`; }
+  function newJoinCode() { return Array.from({ length: 6 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join(''); }
+  function isCloud() { return cloud !== null; }
+  function flash(message, okay = true) { const banner = $('syncBanner'); banner.textContent = message; banner.classList.toggle('error', !okay); clearTimeout(flash.timer); flash.timer = setTimeout(() => { banner.textContent = ''; banner.classList.remove('error'); }, 4500); }
+  async function copy(text) { try { await navigator.clipboard.writeText(text); } catch { const area = document.createElement('textarea'); area.value = text; document.body.append(area); area.select(); document.execCommand('copy'); area.remove(); } }
+  function localBook(book) { return { ...book, status: 'published' }; }
+
+  async function initialiseCloud() {
+    if (!configured || !window.supabase) return;
+    try {
+      cloud = window.supabase.createClient(config.url, config.publishableKey);
+      const { data: { session } } = await cloud.auth.getSession();
+      if (!session) { const { error } = await cloud.auth.signInAnonymously(); if (error) throw error; }
+      await refreshIdentity();
+    } catch (error) { cloud = null; console.error(error); }
   }
-  function openBook(book){ currentBook=book; $('vTitle').textContent=book.title; $('vAuthor').textContent=`지은이: ${book.author}`; const link=$('vOpenLink'), wrap=$('vQrCanvasWrap'); wrap.innerHTML=''; if(book.type==='link'){link.href=book.value;link.classList.remove('hidden'); const canvas=document.createElement('canvas');wrap.append(canvas); if(window.QRCode)QRCode.toCanvas(canvas,book.value,{width:160,margin:1,color:{dark:'#3a2a1c',light:'#ffffff'}});}else{link.classList.add('hidden');const image=document.createElement('img');image.src=book.value;image.alt='그림책 QR 코드';wrap.append(image);} $('editBtn').classList.toggle('hidden',!isTeacher);openOverlay('viewOverlay');}
-  $('joinBtn').onclick=()=>{const code=$('joinCodeInput').value.trim();if(!/^\d{4}$/.test(code)){$('joinMsg').textContent='4자리 숫자를 입력해주세요.';return;}enterClass(code);}; $('joinCodeInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('joinBtn').click();}); $('backBtn').onclick=showLanding; $('teacherModeBtn').onclick=()=>{$('teacherPanel').classList.toggle('hidden');renderTeacherPanel();}; $('toggleTeacherBtn').onclick=()=>{isTeacher=!isTeacher;renderTeacherPanel();}; $('createClassBtn').onclick=()=>{const name=$('newClassName').value.trim();if(!name){$('createMsg').textContent='반 이름을 입력해주세요.';return;}const code=newCode();state.classes[code]={name,books:[]};save();$('newClassName').value='';enterClass(code);}; $('copyCodeBtn').onclick=async()=>{await copy(currentCode);$('copyCodeBtn').textContent='복사됨!';setTimeout(()=>{$('copyCodeBtn').textContent='복사';},1200);}; $('addBtn').onclick=()=>openAdd(); $('segLink').onclick=()=>setMode('link'); $('segQr').onclick=()=>{if(isTeacher)setMode('qr');}; $('fQrFile').onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=event=>{pendingQrData=event.target.result;$('qrPreview').src=pendingQrData;$('qrPreview').classList.remove('hidden');};reader.readAsDataURL(file);}; $('saveBtn').onclick=saveBook; $('copySubmitCode').onclick=async()=>{await copy($('submitCodeText').value);$('copySubmitCode').textContent='복사됐어요!';setTimeout(()=>{$('copySubmitCode').textContent='코드 복사하기';},1500);}; $('editBtn').onclick=()=>{closeAll();openAdd(currentBook);}; $('deleteBtn').onclick=()=>{if(!deleteArmed){deleteArmed=true;$('deleteBtn').textContent='정말 뺄까요? 한 번 더 누르면 삭제돼요';setTimeout(()=>{deleteArmed=false;$('deleteBtn').textContent='이 책 빼기';},4000);return;}state.classes[currentCode].books=state.classes[currentCode].books.filter(b=>b.id!==editingId);save();closeAll();renderShelf();flash('책을 뺐어요.');}; $('mergeConfirm').onclick=()=>{const lines=$('mergeText').value.trim().split('\n').map(x=>x.trim()).filter(Boolean),books=state.classes[currentCode].books,ids=new Set(books.map(b=>b.id));let added=0,skipped=0;lines.forEach(line=>{try{const book=JSON.parse(decodeURIComponent(escape(atob(line))));if(!book?.id||!book?.title||!book?.value||book.code!==currentCode||ids.has(book.id))throw new Error();books.push({id:book.id,title:book.title,author:book.author||'',value:book.value,type:book.type||'link',color:book.color||COLORS[0]});ids.add(book.id);added++;}catch{skipped++;}});$('mergeMsg').textContent=`${added}권 반영, ${skipped}개 건너뜀`;$('mergeText').value='';if(added){save();renderShelf();}}; $('copyBackup').onclick=async()=>{await copy($('backupText').value);$('copyBackup').textContent='복사됐어요!';setTimeout(()=>{$('copyBackup').textContent='복사하기';},1500);}; document.querySelectorAll('[data-close]').forEach(btn=>btn.onclick=closeAll);document.querySelectorAll('.overlay').forEach(overlay=>overlay.onclick=e=>{if(e.target===overlay)closeAll();});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAll();});window.addEventListener('resize',()=>{if(currentCode)renderShelf();});showLanding();
+  async function refreshIdentity() {
+    if (!cloud) return;
+    const { data: { user } } = await cloud.auth.getUser(); authUser = user; isTeacher = false;
+    if (user) { const { data } = await cloud.from('profiles').select('role').eq('id', user.id).maybeSingle(); isTeacher = data?.role === 'teacher'; }
+    renderTeacherPanel();
+  }
+  function unsubscribe() { if (realtimeChannel && cloud) cloud.removeChannel(realtimeChannel); realtimeChannel = null; }
+  async function loadBooks() {
+    const { data, error } = await cloud.from('books').select('id,title,author,link_url,color,status,created_at').eq('class_id', currentClass.id).order('created_at');
+    if (error) { flash(`책장을 불러오지 못했어요: ${error.message}`, false); return; }
+    currentBooks = (data || []).map((book) => ({ ...book, value: book.link_url, type: 'link' }));
+  }
+  function subscribe() {
+    unsubscribe();
+    realtimeChannel = cloud.channel(`books:${currentClass.id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'books', filter: `class_id=eq.${currentClass.id}` }, async () => { await loadBooks(); renderShelf(); }).subscribe();
+  }
+
+  function showLanding() { unsubscribe(); currentClass = null; currentBooks = []; $('shelfScreen').classList.add('hidden'); $('landing').classList.remove('hidden'); renderTeacherPanel(); }
+  function openShelf() { $('landing').classList.add('hidden'); $('shelfScreen').classList.remove('hidden'); renderShelf(); }
+  async function joinClass() {
+    const code = $('joinCodeInput').value.trim().toUpperCase();
+    if (!/^[A-Z0-9]{4,8}$/.test(code)) { $('joinMsg').textContent = '4~8자리 반 코드를 입력해주세요.'; return; }
+    $('joinMsg').textContent = '';
+    if (!isCloud()) {
+      const localClass = localState.classes[code]; if (!localClass) { $('joinMsg').textContent = '해당 코드의 반을 찾을 수 없어요.'; return; }
+      currentClass = { id: code, name: localClass.name, join_code: code }; currentBooks = localClass.books.map(localBook); openShelf(); return;
+    }
+    const { data, error } = await cloud.rpc('join_class', { p_join_code: code });
+    if (error || !data?.[0]) { $('joinMsg').textContent = error?.message || '해당 반을 찾을 수 없어요.'; return; }
+    currentClass = { id: data[0].class_id, name: data[0].class_name, join_code: data[0].join_code }; await loadBooks(); subscribe(); openShelf();
+  }
+
+  function renderTeacherPanel() {
+    const panel = $('teacherPanel'); if (panel.classList.contains('hidden')) return;
+    $('teacherAuth').classList.toggle('hidden', !isCloud() || (authUser && !authUser.is_anonymous));
+    $('localTeacherBtn').classList.toggle('hidden', isCloud());
+    $('teacherClasses').classList.toggle('hidden', !isTeacher);
+    $('teacherSignOutBtn').classList.toggle('hidden', !isCloud() || !isTeacher);
+    if (!isCloud()) $('teacherStatus').textContent = '로컬 데모 모드입니다. Supabase 공개키를 설정하면 공동 책장이 됩니다.';
+    else if (authUser?.is_anonymous) $('teacherStatus').textContent = '학생은 별도 가입 없이 제출할 수 있어요. 선생님은 이메일로 로그인하세요.';
+    else if (!isTeacher) $('teacherStatus').textContent = '로그인되었습니다. 첫 선생님 계정은 설정 단계에서 권한을 부여합니다.';
+    else { $('teacherStatus').textContent = `선생님 계정: ${authUser.email}`; renderClassList(); }
+  }
+  async function renderClassList() {
+    const wrap = $('classListWrap'); wrap.innerHTML = '';
+    let classes = [];
+    if (isCloud()) { const { data, error } = await cloud.from('classes').select('id,name,join_code').eq('teacher_id', authUser.id).order('created_at'); if (error) { wrap.textContent = error.message; return; } classes = data || []; }
+    else classes = Object.entries(localState.classes).map(([join_code, item]) => ({ id: join_code, name: item.name, join_code }));
+    if (!classes.length) wrap.innerHTML = '<p class="author">아직 만든 반이 없어요.</p>';
+    classes.forEach((classInfo) => { const row = document.createElement('button'); row.className = 'class-row'; row.innerHTML = `<span>${escapeHtml(classInfo.name)}</span><strong class="ccode">${classInfo.join_code}</strong>`; row.onclick = async () => { currentClass = classInfo; if (isCloud()) { await loadBooks(); subscribe(); } else currentBooks = localState.classes[classInfo.join_code].books.map(localBook); openShelf(); }; wrap.append(row); });
+  }
+  async function createClass() {
+    const name = $('newClassName').value.trim(); if (!name) { $('createMsg').textContent = '반 이름을 입력해주세요.'; return; }
+    $('createMsg').textContent = '';
+    if (!isCloud()) { const code = newJoinCode(); localState.classes[code] = { name, books: [] }; saveLocal(); currentClass = { id: code, name, join_code: code }; currentBooks = []; openShelf(); return; }
+    for (let i = 0; i < 3; i += 1) { const code = newJoinCode(); const { data, error } = await cloud.from('classes').insert({ name, join_code: code, teacher_id: authUser.id }).select('id,name,join_code').single(); if (!error) { $('newClassName').value = ''; currentClass = data; await loadBooks(); subscribe(); openShelf(); return; } if (i === 2) $('createMsg').textContent = error.message; }
+  }
+
+  function renderShelf() {
+    if (!currentClass) return;
+    $('shelfTitle').textContent = currentClass.name; $('shelfCodeText').textContent = currentClass.join_code; renderTools();
+    const books = isCloud() && !isTeacher ? currentBooks.filter((book) => book.status === 'published') : currentBooks;
+    const container = $('shelfContainer'); container.innerHTML = '';
+    const rows = books.length ? Array.from({ length: Math.ceil(books.length / 6) }, (_, index) => books.slice(index * 6, index * 6 + 6)) : [[]];
+    rows.forEach((rowBooks) => { const row = document.createElement('section'); row.className = 'shelf-row'; row.innerHTML = '<div class="side-post left"></div><div class="side-post right"></div><div class="books-track"></div><div class="plank"></div>'; const track = row.querySelector('.books-track'); if (!rowBooks.length) track.innerHTML = '<div class="empty-state">아직 공개된 책이 없어요.<br><b>오른쪽 아래 “책 꽂기”</b>로 그림책을 제출해 보세요 📚</div>'; rowBooks.forEach((book) => track.append(buildBook(book))); container.append(row); });
+  }
+  function renderTools() { const wrap = $('toolsWrap'); wrap.innerHTML = ''; if (isCloud() && isTeacher) { const approvals = document.createElement('button'); approvals.className = 'tool-btn'; approvals.textContent = `제출 승인하기 (${currentBooks.filter((book) => book.status === 'pending').length})`; approvals.onclick = openApprovalModal; wrap.append(approvals); } const backup = document.createElement('button'); backup.className = 'tool-btn'; backup.textContent = '이 반 백업하기'; backup.onclick = () => { $('backupText').value = JSON.stringify({ class: currentClass, books: currentBooks }); openOverlay('backupOverlay'); }; wrap.append(backup); }
+  function hash(value) { let result = 0; for (let i = 0; i < value.length; i += 1) result = (result * 31 + value.charCodeAt(i)) >>> 0; return result; }
+  function shade(hex, amount) { const value = parseInt(hex.slice(1), 16); const channel = (number) => Math.max(0, Math.min(255, number + Math.round(255 * amount / 100))); return `#${(0x1000000 + channel(value >> 16) * 0x10000 + channel((value >> 8) & 255) * 0x100 + channel(value & 255)).toString(16).slice(1)}`; }
+  function buildBook(book) { const value = hash(book.id); const compact = window.matchMedia('(max-width: 600px)').matches; const veryCompact = window.matchMedia('(max-width: 360px)').matches; const width = veryCompact ? 31 + value % 8 : compact ? 36 + value % 12 : 40 + value % 20; const height = veryCompact ? 114 + (value >> 4) % 18 : compact ? 126 + (value >> 4) % 22 : 150 + (value >> 4) % 35; const element = document.createElement('button'); element.className = `book${book.status === 'pending' ? ' pending-book' : ''}`; element.style.width = `${width}px`; element.style.height = `${height}px`; element.style.background = `linear-gradient(160deg,${shade(book.color, 12)},${book.color} 45%,${shade(book.color, -14)})`; element.setAttribute('aria-label', `${book.title} 열기`); element.innerHTML = '<span class="spine-band top"></span><span class="spine-band bottom"></span>'; const title = document.createElement('span'); title.className = 'spine-title'; title.textContent = book.title; element.append(title); element.onclick = () => openBook(book); return element; }
+
+  function openOverlay(id) { $(id).classList.add('show'); $(id).setAttribute('aria-hidden', 'false'); }
+  function closeAll() { document.querySelectorAll('.overlay').forEach((overlay) => { overlay.classList.remove('show'); overlay.setAttribute('aria-hidden', 'true'); }); }
+  async function openApprovalModal() { await loadBooks(); renderShelf(); renderPendingBooks(); openOverlay('mergeOverlay'); }
+  function renderPendingBooks() { const list = $('pendingList'); list.innerHTML = ''; const pending = currentBooks.filter((book) => book.status === 'pending'); if (!pending.length) { list.innerHTML = '<p class="author">승인 대기 중인 그림책이 없어요.</p>'; return; } pending.forEach((book) => { const row = document.createElement('article'); row.className = 'pending-row'; row.innerHTML = `<div><strong>${escapeHtml(book.title)}</strong><span>${escapeHtml(book.author)}</span></div>`; const actions = document.createElement('div'); actions.className = 'pending-actions'; const approve = document.createElement('button'); approve.className = 'primary'; approve.textContent = '공개'; approve.onclick = () => changeBookStatus(book.id, true); const reject = document.createElement('button'); reject.className = 'secondary'; reject.textContent = '삭제'; reject.onclick = () => changeBookStatus(book.id, false); actions.append(approve, reject); row.append(actions); list.append(row); }); }
+  async function changeBookStatus(id, approved) { const request = approved ? cloud.from('books').update({ status: 'published', approved_by: authUser.id, approved_at: new Date().toISOString() }).eq('id', id) : cloud.from('books').delete().eq('id', id); const { error } = await request; if (error) { flash(error.message, false); return; } await loadBooks(); renderShelf(); renderPendingBooks(); flash(approved ? '그림책을 공개했어요.' : '제출물을 삭제했어요.'); }
+  function setMode(next) { mode = next; $('segLink').classList.toggle('active', next === 'link'); $('segQr').classList.toggle('active', next === 'qr'); $('linkField').classList.toggle('hidden', next !== 'link'); $('qrField').classList.toggle('hidden', next !== 'qr'); }
+  function buildSwatches(color) { selectedColor = color; const wrap = $('swatches'); wrap.innerHTML = ''; COLORS.forEach((current) => { const swatch = document.createElement('button'); swatch.type = 'button'; swatch.className = `swatch${current === color ? ' selected' : ''}`; swatch.style.background = current; swatch.setAttribute('aria-label', `책등 색 ${current}`); swatch.onclick = () => { selectedColor = current; wrap.querySelectorAll('.swatch').forEach((item) => item.classList.remove('selected')); swatch.classList.add('selected'); }; wrap.append(swatch); }); }
+  function openAdd(book = null) { editingId = book?.id || null; pendingQrData = book?.type === 'qr' ? book.value : null; $('fTitle').value = book?.title || ''; $('fAuthor').value = book?.author || ''; $('fUrl').value = book?.value || ''; const canUseQr = !isCloud() && isTeacher; $('modeSwitchWrap').classList.toggle('hidden', !canUseQr); setMode(canUseQr && book?.type === 'qr' ? 'qr' : 'link'); $('notWriterNote').classList.toggle('hidden', isTeacher); $('saveBtn').textContent = isTeacher ? '책장에 꽂기' : '제출하고 승인 기다리기'; $('deleteBtn').classList.toggle('hidden', !(isTeacher && book)); $('deleteBtn').textContent = '이 책 빼기'; $('formMsg').textContent = ''; buildSwatches(book?.color || COLORS[Math.floor(Math.random() * COLORS.length)]); openOverlay('addOverlay'); setTimeout(() => $('fTitle').focus(), 10); }
+  async function saveBook() {
+    const title = $('fTitle').value.trim(), author = $('fAuthor').value.trim(); let value = $('fUrl').value.trim();
+    if (!title || !author) { $('formMsg').textContent = '책 제목과 이름을 모두 적어주세요.'; return; }
+    if (mode === 'qr' && !isCloud()) value = pendingQrData;
+    if (!value) { $('formMsg').textContent = '그림책 링크를 붙여넣어주세요.'; return; }
+    if (mode !== 'qr' && !/^https?:\/\//i.test(value)) value = `https://${value}`;
+    if (isCloud()) {
+      if (isTeacher) { const payload = { title, author, link_url: value, color: selectedColor, class_id: currentClass.id, submitted_by: authUser.id, status: 'published', approved_by: authUser.id, approved_at: new Date().toISOString() }; const request = editingId ? cloud.from('books').update(payload).eq('id', editingId) : cloud.from('books').insert(payload); const { error } = await request; if (error) { $('formMsg').textContent = error.message; return; } closeAll(); await loadBooks(); renderShelf(); flash('책장에 공개했어요.'); return; }
+      const { error } = await cloud.rpc('submit_book', { p_join_code: currentClass.join_code, p_title: title, p_author: author, p_link_url: value, p_color: selectedColor }); if (error) { $('formMsg').textContent = error.message; return; } closeAll(); flash('제출했어요. 선생님이 승인하면 책장에 공개됩니다.'); return;
+    }
+    const books = localState.classes[currentClass.join_code].books; const book = { id: editingId || newId(), title, author, value, type: mode === 'qr' ? 'qr' : 'link', color: selectedColor }; const index = books.findIndex((item) => item.id === editingId); if (index >= 0) books[index] = book; else books.push(book); saveLocal(); closeAll(); currentBooks = books.map(localBook); renderShelf(); flash('이 기기 책장에 저장했어요.');
+  }
+  function openBook(book) { currentBook = book; $('vTitle').textContent = book.title; $('vAuthor').textContent = `지은이: ${book.author}`; const link = $('vOpenLink'), wrap = $('vQrCanvasWrap'); wrap.innerHTML = ''; link.href = book.value; link.classList.remove('hidden'); const canvas = document.createElement('canvas'); wrap.append(canvas); if (window.QRCode) window.QRCode.toCanvas(canvas, book.value, { width: 160, margin: 1, color: { dark: '#3a2a1c', light: '#ffffff' } }); $('editBtn').classList.toggle('hidden', !isTeacher); openOverlay('viewOverlay'); }
+  async function deleteBook() { if (!deleteArmed) { deleteArmed = true; $('deleteBtn').textContent = '정말 뺄까요? 한 번 더 누르면 삭제돼요'; setTimeout(() => { deleteArmed = false; $('deleteBtn').textContent = '이 책 빼기'; }, 4000); return; } if (isCloud()) { const { error } = await cloud.from('books').delete().eq('id', editingId); if (error) { flash(error.message, false); return; } await loadBooks(); } else { localState.classes[currentClass.join_code].books = localState.classes[currentClass.join_code].books.filter((book) => book.id !== editingId); saveLocal(); currentBooks = localState.classes[currentClass.join_code].books.map(localBook); } closeAll(); renderShelf(); flash('책을 뺐어요.'); }
+  async function signUpTeacher() { const email = $('teacherEmail').value.trim(), password = $('teacherPassword').value; if (!email || password.length < 8) { $('teacherAuthMsg').textContent = '이메일과 8자 이상 비밀번호를 입력해주세요.'; return; } const { data, error } = await cloud.auth.signUp({ email, password }); if (error) { $('teacherAuthMsg').textContent = error.message; return; } $('teacherAuthMsg').textContent = data.session ? '가입 및 로그인되었습니다.' : '인증 이메일을 보냈어요. 이메일 인증 후 로그인해주세요.'; await refreshIdentity(); }
+  async function signInTeacher() { const { error } = await cloud.auth.signInWithPassword({ email: $('teacherEmail').value.trim(), password: $('teacherPassword').value }); if (error) { $('teacherAuthMsg').textContent = error.message; return; } $('teacherAuthMsg').textContent = ''; await refreshIdentity(); }
+  async function signOutTeacher() { await cloud.auth.signOut(); await cloud.auth.signInAnonymously(); await refreshIdentity(); }
+
+  $('joinBtn').onclick = joinClass; $('joinCodeInput').addEventListener('keydown', (event) => { if (event.key === 'Enter') joinClass(); }); $('backBtn').onclick = showLanding;
+  $('teacherModeBtn').onclick = () => { $('teacherPanel').classList.toggle('hidden'); renderTeacherPanel(); }; $('localTeacherBtn').onclick = () => { isTeacher = !isTeacher; renderTeacherPanel(); }; $('teacherSignUpBtn').onclick = signUpTeacher; $('teacherSignInBtn').onclick = signInTeacher; $('teacherSignOutBtn').onclick = signOutTeacher; $('createClassBtn').onclick = createClass;
+  $('copyCodeBtn').onclick = async () => { await copy(currentClass.join_code); $('copyCodeBtn').textContent = '복사됨!'; setTimeout(() => { $('copyCodeBtn').textContent = '복사'; }, 1200); }; $('addBtn').onclick = () => openAdd(); $('segLink').onclick = () => setMode('link'); $('segQr').onclick = () => setMode('qr'); $('fQrFile').onchange = (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (load) => { pendingQrData = load.target.result; }; reader.readAsDataURL(file); };
+  $('saveBtn').onclick = saveBook; $('editBtn').onclick = () => { closeAll(); openAdd(currentBook); }; $('deleteBtn').onclick = deleteBook; $('copyBackup').onclick = async () => { await copy($('backupText').value); $('copyBackup').textContent = '복사됐어요!'; setTimeout(() => { $('copyBackup').textContent = '복사하기'; }, 1500); }; document.querySelectorAll('[data-close]').forEach((button) => { button.onclick = closeAll; }); document.querySelectorAll('.overlay').forEach((overlay) => { overlay.onclick = (event) => { if (event.target === overlay) closeAll(); }; }); document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeAll(); }); window.addEventListener('resize', () => { if (currentClass) renderShelf(); });
+  (async () => { await initialiseCloud(); showLanding(); })();
 })();
