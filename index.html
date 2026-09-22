@@ -10,6 +10,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="cloud.css">
+  <style>
+    .overlay{display:grid;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .26s ease,visibility 0s linear .26s}
+    .overlay.show{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .26s ease,visibility 0s}
+    .overlay .modal{opacity:0;transform:translateY(14px) scale(.985);transition:transform .3s cubic-bezier(.22,1,.36,1),opacity .2s ease}
+    .overlay.show .modal{opacity:1;transform:translateY(0) scale(1)}
+    button,.book{transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
+    @media (prefers-reduced-motion:reduce){.overlay,.overlay .modal,button,.book{transition:none!important}}
+  </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
@@ -98,6 +106,7 @@
     <label for="feedbackImages">사진 첨부 <span>(선택, 최대 2장 · 장당 5MB)</span></label><input id="feedbackImages" type="file" accept="image/jpeg,image/png,image/webp,image/heic" multiple><div id="feedbackPreviews" class="feedback-previews" aria-live="polite"></div>
     <p class="feedback-privacy">이름, 얼굴, 연락처 등 개인정보가 보이는 사진은 올리지 말아주세요.</p><button id="feedbackSubmitBtn" class="primary" type="button">의견 보내기</button><p id="feedbackMsg" class="message" role="alert"></p>
   </section></div>
+  <div id="feedbackSuccessOverlay" class="overlay" aria-hidden="true"><section class="modal feedback-success-modal" role="dialog" aria-modal="true" aria-labelledby="feedbackSuccessTitle" style="text-align:center"><div class="feedback-success-icon" aria-hidden="true" style="display:grid;place-items:center;width:58px;height:58px;margin:0 auto 14px;border-radius:50%;background:#dcebd8;color:#4d7d48;font-size:34px;font-weight:800;line-height:1">✓</div><h2 id="feedbackSuccessTitle">의견을 보냈어요</h2><p id="feedbackSuccessText" class="author">소중한 의견 감사합니다.<br>확인 후 더 좋은 서가로 개선할게요.</p><button id="feedbackSuccessClose" class="primary" type="button" style="margin-top:10px">확인</button></section></div>
   <div id="adminFeedbackOverlay" class="overlay" aria-hidden="true"><section class="modal admin-feedback-modal" role="dialog" aria-modal="true" aria-labelledby="adminFeedbackTitle">
     <button class="modal-close" data-close aria-label="닫기">×</button><p class="eyebrow">관리자 전용</p><h2 id="adminFeedbackTitle">접수된 의견</h2><p class="author">새로 접수된 오류와 의견을 확인할 수 있어요.</p><div id="adminFeedbackList" class="admin-feedback-list"></div>
   </section></div>
