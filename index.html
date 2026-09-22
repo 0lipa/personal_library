@@ -15,8 +15,26 @@
     .overlay.show{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .26s ease,visibility 0s}
     .overlay .modal{opacity:0;transform:translateY(14px) scale(.985);transition:transform .3s cubic-bezier(.22,1,.36,1),opacity .2s ease}
     .overlay.show .modal{opacity:1;transform:translateY(0) scale(1)}
-    button,.book{transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
-    @media (prefers-reduced-motion:reduce){.overlay,.overlay .modal,button,.book{transition:none!important}}
+    :root{--motion-ease:cubic-bezier(.22,1,.36,1)}
+    button,.book,.class-row,.pending-row,.feedback-preview,.swatch,input,textarea,select{transition:transform .2s var(--motion-ease),box-shadow .2s ease,filter .2s ease,background-color .2s ease,border-color .2s ease,outline-color .2s ease,opacity .2s ease}
+    button:not(.modal-close):hover{transform:translateY(-2px);filter:brightness(1.025)}
+    button:not(.modal-close):active{transform:translateY(1px) scale(.985);filter:brightness(.98)}
+    input:focus,textarea:focus,select:focus{transform:translateY(-1px);box-shadow:0 5px 14px #6e321d13}
+    .class-row:hover,.pending-row:hover{transform:translateX(3px);background:#fff9ed}
+    .swatch:hover{transform:scale(1.12)}
+    .fab,.feedback-fab{animation:soft-float 3.6s ease-in-out infinite}
+    .shelf-row{animation:shelf-arrive .42s var(--motion-ease) both}
+    .book{animation:book-arrive .38s var(--motion-ease) both}
+    .book:nth-child(2){animation-delay:.04s}.book:nth-child(3){animation-delay:.08s}.book:nth-child(4){animation-delay:.12s}.book:nth-child(5){animation-delay:.16s}.book:nth-child(6){animation-delay:.2s}
+    #landing,#shelfScreen{transition:opacity .2s ease,transform .28s var(--motion-ease)}
+    #landing.screen-exiting,#shelfScreen.screen-exiting{opacity:0;transform:translateY(-8px)}
+    #landing.screen-entering,#shelfScreen.screen-entering{opacity:0;transform:translateY(10px)}
+    #syncBanner{opacity:0;transform:translateY(-4px);transition:opacity .2s ease,transform .25s var(--motion-ease)}
+    #syncBanner.notice-visible{opacity:1;transform:translateY(0)}
+    @keyframes soft-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+    @keyframes shelf-arrive{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes book-arrive{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+    @media (prefers-reduced-motion:reduce){.overlay,.overlay .modal,button,.book,.class-row,.pending-row,.feedback-preview,.swatch,input,textarea,select,#landing,#shelfScreen,#syncBanner{transition:none!important;animation:none!important}}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
@@ -107,6 +125,7 @@
     <p class="feedback-privacy">이름, 얼굴, 연락처 등 개인정보가 보이는 사진은 올리지 말아주세요.</p><button id="feedbackSubmitBtn" class="primary" type="button">의견 보내기</button><p id="feedbackMsg" class="message" role="alert"></p>
   </section></div>
   <div id="feedbackSuccessOverlay" class="overlay" aria-hidden="true"><section class="modal feedback-success-modal" role="dialog" aria-modal="true" aria-labelledby="feedbackSuccessTitle" style="text-align:center"><div class="feedback-success-icon" aria-hidden="true" style="display:grid;place-items:center;width:58px;height:58px;margin:0 auto 14px;border-radius:50%;background:#dcebd8;color:#4d7d48;font-size:34px;font-weight:800;line-height:1">✓</div><h2 id="feedbackSuccessTitle">의견을 보냈어요</h2><p id="feedbackSuccessText" class="author">소중한 의견 감사합니다.<br>확인 후 더 좋은 서가로 개선할게요.</p><button id="feedbackSuccessClose" class="primary" type="button" style="margin-top:10px">확인</button></section></div>
+  <div id="actionSuccessOverlay" class="overlay" aria-hidden="true"><section class="modal feedback-success-modal" role="dialog" aria-modal="true" aria-labelledby="actionSuccessTitle" style="text-align:center"><div class="feedback-success-icon" aria-hidden="true" style="display:grid;place-items:center;width:58px;height:58px;margin:0 auto 14px;border-radius:50%;background:#dcebd8;color:#4d7d48;font-size:34px;font-weight:800;line-height:1">✓</div><h2 id="actionSuccessTitle">제출되었습니다</h2><p id="actionSuccessText" class="author">선생님이 확인하고 승인하면<br>우리 반 책장에 공개돼요.</p><button id="actionSuccessClose" class="primary" type="button" style="margin-top:10px">확인</button></section></div>
   <div id="adminFeedbackOverlay" class="overlay" aria-hidden="true"><section class="modal admin-feedback-modal" role="dialog" aria-modal="true" aria-labelledby="adminFeedbackTitle">
     <button class="modal-close" data-close aria-label="닫기">×</button><p class="eyebrow">관리자 전용</p><h2 id="adminFeedbackTitle">접수된 의견</h2><p class="author">새로 접수된 오류와 의견을 확인할 수 있어요.</p><div id="adminFeedbackList" class="admin-feedback-list"></div>
   </section></div>

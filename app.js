@@ -15,7 +15,7 @@
   function newId() { return `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`; }
   function newJoinCode() { return Array.from({ length: 6 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join(''); }
   function isCloud() { return cloud !== null; }
-  function flash(message, okay = true) { const banner = $('syncBanner'); banner.textContent = message; banner.classList.toggle('error', !okay); clearTimeout(flash.timer); flash.timer = setTimeout(() => { banner.textContent = ''; banner.classList.remove('error'); }, 4500); }
+  function flash(message, okay = true) { const banner = $('syncBanner'); banner.textContent = message; banner.classList.toggle('error', !okay); banner.classList.add('notice-visible'); clearTimeout(flash.timer); flash.timer = setTimeout(() => { banner.classList.remove('notice-visible'); setTimeout(() => { if (!banner.classList.contains('notice-visible')) { banner.textContent = ''; banner.classList.remove('error'); } }, 220); }, 4500); }
   function friendlyError(error, fallback = '요청을 처리하지 못했어요. 잠시 후 다시 시도해주세요.') {
     const message = error?.message || '';
     if (/[가-힣]/.test(message)) return message;
@@ -57,8 +57,9 @@
     realtimeChannel = cloud.channel(`books:${currentClass.id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'books', filter: `class_id=eq.${currentClass.id}` }, async () => { await loadBooks(); renderShelf(); }).subscribe();
   }
 
-  function showLanding() { unsubscribe(); currentClass = null; currentBooks = []; $('shelfScreen').classList.add('hidden'); $('landing').classList.remove('hidden'); renderTeacherPanel(); }
-  function openShelf() { $('landing').classList.add('hidden'); $('shelfScreen').classList.remove('hidden'); renderShelf(); }
+  function switchScreen(hideId, showId) { const hiding = $(hideId), showing = $(showId); clearTimeout(switchScreen.timer); if (hiding.classList.contains('hidden')) { showing.classList.remove('hidden'); return; } hiding.classList.add('screen-exiting'); switchScreen.timer = setTimeout(() => { hiding.classList.add('hidden'); hiding.classList.remove('screen-exiting'); showing.classList.remove('hidden'); showing.classList.add('screen-entering'); requestAnimationFrame(() => requestAnimationFrame(() => showing.classList.remove('screen-entering'))); }, 180); }
+  function showLanding() { unsubscribe(); currentClass = null; currentBooks = []; switchScreen('shelfScreen', 'landing'); renderTeacherPanel(); }
+  function openShelf() { switchScreen('landing', 'shelfScreen'); renderShelf(); }
   async function joinClass() {
     const code = $('joinCodeInput').value.trim().toUpperCase();
     if (!/^[A-Z0-9]{4,8}$/.test(code)) { $('joinMsg').textContent = '4~8자리 반 코드를 입력해주세요.'; return; }
@@ -114,6 +115,7 @@
 
   function openOverlay(id) { $(id).classList.add('show'); $(id).setAttribute('aria-hidden', 'false'); }
   function closeAll() { document.querySelectorAll('.overlay').forEach((overlay) => { overlay.classList.remove('show'); overlay.setAttribute('aria-hidden', 'true'); }); }
+  function showActionSuccess(title, message) { $('actionSuccessTitle').textContent = title; $('actionSuccessText').textContent = message; openOverlay('actionSuccessOverlay'); }
   async function openApprovalModal() { await loadBooks(); renderShelf(); renderPendingBooks(); openOverlay('mergeOverlay'); }
   function renderPendingBooks() { const list = $('pendingList'); list.innerHTML = ''; const pending = currentBooks.filter((book) => book.status === 'pending'); if (!pending.length) { list.innerHTML = '<p class="author">승인 대기 중인 그림책이 없어요.</p>'; return; } pending.forEach((book) => { const row = document.createElement('article'); row.className = 'pending-row'; row.innerHTML = `<div><strong>${escapeHtml(book.title)}</strong><span>${escapeHtml(book.author)}</span></div>`; const actions = document.createElement('div'); actions.className = 'pending-actions'; const approve = document.createElement('button'); approve.className = 'primary'; approve.textContent = '공개'; approve.onclick = () => changeBookStatus(book.id, true); const reject = document.createElement('button'); reject.className = 'secondary'; reject.textContent = '삭제'; reject.onclick = () => changeBookStatus(book.id, false); actions.append(approve, reject); row.append(actions); list.append(row); }); }
   async function changeBookStatus(id, approved) { const request = approved ? cloud.from('books').update({ status: 'published', approved_by: authUser.id, approved_at: new Date().toISOString() }).eq('id', id) : cloud.from('books').delete().eq('id', id); const { error } = await request; if (error) { flash(friendlyError(error, '제출물을 처리하지 못했어요.'), false); return; } await loadBooks(); renderShelf(); renderPendingBooks(); flash(approved ? '그림책을 공개했어요.' : '제출물을 삭제했어요.'); }
@@ -128,7 +130,7 @@
     if (mode !== 'qr' && !/^https?:\/\//i.test(value)) value = `https://${value}`;
     if (isCloud()) {
       if (isTeacher) { const payload = { title, author, link_url: value, color: selectedColor, class_id: currentClass.id, submitted_by: authUser.id, status: 'published', approved_by: authUser.id, approved_at: new Date().toISOString() }; const request = editingId ? cloud.from('books').update(payload).eq('id', editingId) : cloud.from('books').insert(payload); const { error } = await request; if (error) { $('formMsg').textContent = friendlyError(error, '그림책을 저장하지 못했어요.'); return; } closeAll(); await loadBooks(); renderShelf(); flash('책장에 공개했어요.'); return; }
-      const { error } = await cloud.rpc('submit_book', { p_join_code: currentClass.join_code, p_title: title, p_author: author, p_link_url: value, p_color: selectedColor }); if (error) { $('formMsg').textContent = friendlyError(error, '그림책을 제출하지 못했어요.'); return; } closeAll(); flash('제출했어요. 선생님이 승인하면 책장에 공개됩니다.'); return;
+      const { error } = await cloud.rpc('submit_book', { p_join_code: currentClass.join_code, p_title: title, p_author: author, p_link_url: value, p_color: selectedColor }); if (error) { $('formMsg').textContent = friendlyError(error, '그림책을 제출하지 못했어요.'); return; } closeAll(); showActionSuccess('제출되었습니다', '선생님이 확인하고 승인하면 우리 반 책장에 공개돼요.'); return;
     }
     const books = localState.classes[currentClass.join_code].books; const book = { id: editingId || newId(), title, author, value, type: mode === 'qr' ? 'qr' : 'link', color: selectedColor }; const index = books.findIndex((item) => item.id === editingId); if (index >= 0) books[index] = book; else books.push(book); saveLocal(); closeAll(); currentBooks = books.map(localBook); renderShelf(); flash('이 기기 책장에 저장했어요.');
   }
@@ -186,7 +188,7 @@
 
   $('joinBtn').onclick = joinClass; $('joinCodeInput').addEventListener('keydown', (event) => { if (event.key === 'Enter') joinClass(); }); $('backBtn').onclick = showLanding;
   $('teacherModeBtn').onclick = () => { $('teacherPanel').classList.toggle('hidden'); renderTeacherPanel(); }; $('localTeacherBtn').onclick = () => { isTeacher = !isTeacher; renderTeacherPanel(); }; $('teacherSignUpBtn').onclick = signUpTeacher; $('teacherSignInBtn').onclick = signInTeacher; $('teacherSignOutBtn').onclick = signOutTeacher; $('createClassBtn').onclick = createClass; $('teacherInviteBtn').onclick = inviteTeacher; $('teacherInviteEmail').addEventListener('keydown', (event) => { if (event.key === 'Enter') inviteTeacher(); }); $('adminFeedbackBtn').onclick = openAdminFeedback;
-  $('feedbackBtn').onclick = openFeedback; $('feedbackMessage').oninput = updateFeedbackCount; $('feedbackImages').onchange = chooseFeedbackFiles; $('feedbackSubmitBtn').onclick = submitFeedback; $('feedbackSuccessClose').onclick = closeAll;
+  $('feedbackBtn').onclick = openFeedback; $('feedbackMessage').oninput = updateFeedbackCount; $('feedbackImages').onchange = chooseFeedbackFiles; $('feedbackSubmitBtn').onclick = submitFeedback; $('feedbackSuccessClose').onclick = closeAll; $('actionSuccessClose').onclick = closeAll;
   $('copyCodeBtn').onclick = async () => { await copy(currentClass.join_code); $('copyCodeBtn').textContent = '복사됨!'; setTimeout(() => { $('copyCodeBtn').textContent = '복사'; }, 1200); }; $('addBtn').onclick = () => openAdd(); $('segLink').onclick = () => setMode('link'); $('segQr').onclick = () => setMode('qr'); $('fQrFile').onchange = (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (load) => { pendingQrData = load.target.result; }; reader.readAsDataURL(file); };
   $('saveBtn').onclick = saveBook; $('editBtn').onclick = () => { closeAll(); openAdd(currentBook); }; $('deleteBtn').onclick = deleteBook; $('copyBackup').onclick = async () => { await copy($('backupText').value); $('copyBackup').textContent = '복사됐어요!'; setTimeout(() => { $('copyBackup').textContent = '복사하기'; }, 1500); }; document.querySelectorAll('[data-close]').forEach((button) => { button.onclick = closeAll; }); document.querySelectorAll('.overlay').forEach((overlay) => { overlay.onclick = (event) => { if (event.target === overlay) closeAll(); }; }); document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeAll(); }); window.addEventListener('resize', () => { if (currentClass) renderShelf(); });
   (async () => { await initialiseCloud(); showLanding(); })();
